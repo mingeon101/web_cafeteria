@@ -1,1 +1,1 @@
-# test-web_cafeteria
+# 스마트한 학교 급식 시스템
