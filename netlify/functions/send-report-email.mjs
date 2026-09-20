@@ -7,11 +7,11 @@ const json = (statusCode, body) => ({
   body: JSON.stringify(body)
 });
 
-export default async (request) => {
-  if (request.method !== 'POST') return json(405, { error: 'POST 요청만 사용할 수 있습니다.' });
+export async function handler(event) {
+  if (event.httpMethod !== 'POST') return json(405, { error: 'POST 요청만 사용할 수 있습니다.' });
 
   try {
-    const { to, subject, html, text } = await request.json();
+    const { to, subject, html, text } = JSON.parse(event.body || '{}');
     if (typeof to !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
       return json(400, { error: '올바른 수신자 이메일 주소를 입력해 주세요.' });
     }
@@ -34,6 +34,7 @@ export default async (request) => {
     if (!response.ok) return json(response.status, { error: result.message || 'Resend가 이메일을 받지 못했습니다.' });
     return json(200, { id: result.id });
   } catch (error) {
-    return json(500, { error: '이메일 발송 처리 중 오류가 발생했습니다.' });
+    console.error('send-report-email failed', error);
+    return json(500, { error: error instanceof Error ? error.message : '이메일 발송 처리 중 오류가 발생했습니다.' });
   }
-};
+}
