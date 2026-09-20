@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Smart Cafeteria | 서비스 바로가기</title>
+  <style>
+    :root{--ink:#17172b;--purple:#7256d7;--purple-dark:#5238b8;--bg:#f6f5fb;--card:#fff;--muted:#69677d;--line:#e8e6f0}
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,"Noto Sans KR","Malgun Gothic",sans-serif;color:var(--ink);background:var(--bg)}
+    .hero{background:linear-gradient(120deg,#19182c 0%,#262047 100%);color:#fff;padding:70px 24px 82px}.inner{max-width:1050px;margin:auto}
+    .brand{display:flex;align-items:center;gap:11px;font-size:18px;font-weight:800}.mark{display:grid;place-items:center;width:38px;height:38px;background:#745bdd;border-radius:12px;font-size:20px}.eyebrow{margin:62px 0 12px;color:#cfc7ff;font-size:14px;font-weight:700;letter-spacing:.06em}.hero h1{font-size:clamp(32px,5vw,52px);margin:0;letter-spacing:-.055em}.hero p{margin:18px 0 0;color:#d8d5e8;font-size:17px;line-height:1.65}
+    main{max-width:1050px;margin:-42px auto 0;padding:0 24px 64px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}.group{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:28px;box-shadow:0 14px 35px rgba(28,24,54,.08)}
+    .group-head{display:flex;align-items:center;gap:12px;margin-bottom:20px}.icon{width:43px;height:43px;display:grid;place-items:center;border-radius:13px;background:#ede9ff;font-size:21px}.group h2{margin:0;font-size:22px;letter-spacing:-.04em}.group .desc{margin:5px 0 0;color:var(--muted);font-size:14px}
+    .link-list{display:grid;gap:11px}.link-card{display:flex;align-items:center;gap:13px;padding:15px;border:1px solid var(--line);border-radius:14px;color:inherit;text-decoration:none;transition:.18s ease;background:#fff}.link-card:hover{border-color:#a697ef;transform:translateY(-2px);box-shadow:0 9px 18px rgba(90,65,180,.12)}.link-card:focus-visible{outline:3px solid #bdb1f6;outline-offset:2px}
+    .link-icon{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;background:#f3f1fa;border-radius:10px;font-size:16px}.link-copy{min-width:0;flex:1}.link-copy strong{display:block;font-size:15px}.link-copy span{display:block;margin-top:3px;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.arrow{color:var(--purple);font-size:22px;font-weight:500}.footer{text-align:center;color:#858297;font-size:13px;padding:4px}
+    @media(max-width:720px){.hero{padding:32px 20px 67px}.eyebrow{margin-top:42px}.hero p{font-size:15px}main{padding:0 16px 40px}.grid{grid-template-columns:1fr;gap:16px}.group{padding:21px;border-radius:18px}}
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="inner">
+      <div class="brand"><span class="mark">🍱</span> Smart Cafeteria</div>
+      <p class="eyebrow">SERVICE PORTAL</p>
+      <h1>스마트 급식 서비스<br>바로가기</h1>
+      <p>관리자와 학생이 목적에 맞는 서비스로 빠르게 이동할 수 있습니다.</p>
+    </div>
+  </header>
+  <main>
+    <div class="grid">
+      <section class="group" aria-labelledby="admin-title">
+        <div class="group-head"><span class="icon">⚙️</span><div><h2 id="admin-title">관리자용</h2><p class="desc">급식 관리 · 리포트 작성 · 운영 시스템</p></div></div>
+        <nav class="link-list" aria-label="관리자 서비스">
+          <a class="link-card" href="https://test-cafeteria.netlify.app/admin/"><span class="link-icon">📊</span><span class="link-copy"><strong>관리자 대시보드</strong><span>급식 및 학생별 영양리포트 관리</span></span><span class="arrow">›</span></a>
+          <a class="link-card" href="https://mingeon101.github.io/web_cafeteria/system/"><span class="link-icon">🖥️</span><span class="link-copy"><strong>급식 운영 시스템</strong><span>급식 시스템 관리 화면</span></span><span class="arrow">›</span></a>
+          <a class="link-card" href="https://mingeon101.github.io/web_cafeteria/public/facelogin/admin/"><span class="link-icon">🔐</span><span class="link-copy"><strong>학생 등록하기</strong><span>관리자 학생등록 페이지</span></span><span class="arrow">›</span></a>
+        </nav>
+      </section>
+      <section class="group" aria-labelledby="student-title">
+        <div class="group-head"><span class="icon">🎓</span><div><h2 id="student-title">학생용</h2><p class="desc">급식 리뷰 · 개인 영양 정보 · 급식주문</p></div></div>
+        <nav class="link-list" aria-label="학생 서비스">
+          <a class="link-card" href="https://test-cafeteria.netlify.app/review/"><span class="link-icon">💬</span><span class="link-copy"><strong>학생 급식 리뷰</strong><span>오늘의 급식 리뷰를 확인하고 작성</span></span><span class="arrow">›</span></a>
+          <a class="link-card" href="https://test-cafeteria.netlify.app/"><span class="link-icon">🍽️</span><span class="link-copy"><strong>오늘의 급식주문</strong><span>급식주문</span></span><span class="arrow">›</span></a>
+          <a class="link-card" href="https://test-cafeteria.netlify.app/student.html"><span class="link-icon">📈</span><span class="link-copy"><strong>나의 영양리포트</strong><span>관리자가 보낸 개인 리포트 링크로 조회</span></span><span class="arrow">›</span></a>
+          <a class="link-card" href="https://mingeon101.github.io/web_cafeteria/public/facelogin/"><span class="link-icon">🙂</span><span class="link-copy"><strong>급식 선주문</strong><span>미리 주문하기</span></span><span class="arrow">›</span></a>
+        </nav>
+      </section>
+    </div>
+    <p class="footer">Smart Cafeteria · 급식 운영과 학생 경험을 연결합니다.</p>
+  </main>
+</body>
+</html>
