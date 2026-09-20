@@ -1,4 +1,5 @@
-const RESEND_API_KEY = process.env.RESEND_API_KEY || 're_B2G4Qu7i_Bj3mYxRwThiaJsY7Xk7dC4kj';
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+// 도메인 인증 전에는 Resend의 기본 테스트 발신 주소를 사용합니다.
 const FROM = process.env.RESEND_FROM || 'Smart Cafeteria <onboarding@resend.dev>';
 
 const json = (statusCode, body) => ({
@@ -9,7 +10,7 @@ const json = (statusCode, body) => ({
 
 export async function handler(event) {
   if (event.httpMethod !== 'POST') return json(405, { error: 'POST 요청만 사용할 수 있습니다.' });
-
+  if (!RESEND_API_KEY) return json(500, { error: 'Netlify 환경변수 RESEND_API_KEY가 설정되지 않았습니다.' });
   try {
     const { to, subject, html, text } = JSON.parse(event.body || '{}');
     if (typeof to !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
