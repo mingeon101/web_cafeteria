@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#211c3b">
+  <title>오늘의 급식 | Smart Cafeteria</title>
+  <style>
+    :root{--ink:#1d1a30;--muted:#716c83;--purple:#7358d6;--lav:#f0edff;--orange:#ed7650;--bg:#f7f6fb;--line:#e8e5f0}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,"Noto Sans KR","Malgun Gothic",sans-serif}.top{min-height:290px;background:radial-gradient(circle at 85% 10%,#5d4cb0 0,transparent 30%),linear-gradient(125deg,#19172b,#29204d);color:#fff;padding:28px 20px 110px}.wrap{max-width:760px;margin:auto}.brand{display:flex;gap:10px;align-items:center;font-weight:800}.brand b{display:grid;place-items:center;width:34px;height:34px;background:#765ce2;border-radius:11px}.kicker{margin:60px 0 9px;color:#d8d1ff;font-weight:700;font-size:13px;letter-spacing:.1em}.top h1{margin:0;font-size:clamp(31px,8vw,46px);letter-spacing:-.06em}.top p{margin:14px 0 0;color:#ddd9ea;line-height:1.6}.content{max-width:760px;margin:-72px auto 0;padding:0 20px 55px}.date-card,.menu-card{background:#fff;border:1px solid var(--line);box-shadow:0 14px 40px rgba(34,28,67,.09);border-radius:22px}.date-card{padding:20px;display:flex;align-items:center;gap:14px}.calendar{display:grid;place-items:center;width:46px;height:46px;border-radius:14px;background:var(--lav);font-size:21px}.date-copy{flex:1}.date-copy span{display:block;color:var(--muted);font-size:13px}.date-copy strong{display:block;font-size:18px;margin-top:3px;letter-spacing:-.03em}.refresh{border:0;background:var(--purple);color:#fff;font:inherit;font-weight:700;border-radius:11px;padding:11px 14px;cursor:pointer}.refresh:hover{background:#5c43bd}.refresh:disabled{opacity:.55;cursor:wait}.menu-card{margin-top:18px;padding:25px}.menu-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}.menu-head h2{margin:0;font-size:22px;letter-spacing:-.045em}.pill{white-space:nowrap;color:#5a43b4;background:var(--lav);border-radius:999px;padding:6px 10px;font-size:12px;font-weight:700}.menu-list{display:grid;gap:12px;margin:21px 0 0}.item{display:flex;align-items:center;gap:14px;padding:16px;border:1px solid var(--line);border-radius:16px;background:#fff}.food-icon{display:grid;place-items:center;flex:0 0 43px;height:43px;border-radius:13px;background:#f5f3fa;font-size:22px}.food-copy{min-width:0}.food-copy span{display:block;color:var(--muted);font-size:12px;margin-bottom:3px}.food-copy strong{display:block;font-size:17px;overflow-wrap:anywhere;letter-spacing:-.025em}.notice{margin-top:17px;padding:15px 16px;border-radius:14px;background:#fff7ee;color:#865233;line-height:1.55;font-size:13px}.state{text-align:center;padding:45px 10px;color:var(--muted)}.state .big{font-size:34px;margin-bottom:12px}.state p{margin:0;line-height:1.6}.error{background:#fff2f0;color:#b24032}.foot{text-align:center;color:#8d879d;font-size:12px;padding:22px 0 0}@media(max-width:480px){.top{padding-bottom:100px}.kicker{margin-top:43px}.content{padding:0 14px 40px}.date-card{padding:16px}.date-copy strong{font-size:16px}.refresh{padding:10px;font-size:13px}.menu-card{padding:19px}.item{padding:13px}.food-copy strong{font-size:16px}}
+  </style>
+</head>
+<body>
+  <header class="top"><div class="wrap"><div class="brand"><b>🍱</b> Smart Cafeteria</div><p class="kicker">TODAY'S MENU</p><h1>오늘의 급식</h1><p>오늘 제공되는 식단을 확인해 보세요.</p></div></header>
+  <main class="content">
+    <section class="date-card" aria-label="식단 날짜"><div class="calendar">📅</div><div class="date-copy"><span>급식 제공일</span><strong id="displayDate">불러오는 중</strong></div><button type="button" class="refresh" id="refresh">새로고침</button></section>
+    <section class="menu-card" aria-live="polite"><div class="menu-head"><h2>오늘의 메뉴</h2><span class="pill" id="menuStatus">실시간 연동</span></div><div id="menuBody"><div class="state"><div class="big">🍽️</div><p>오늘의 식단을 불러오는 중입니다.</p></div></div></section>
+    <p class="foot">메뉴는 급식 운영 시스템에 등록된 정보로 표시됩니다.</p>
+  </main>
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+    import { getDatabase, ref, get } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
+    const firebaseConfig={apiKey:'AIzaSyC3SvV8-bTyQClyZlGWybhR3z5YvLGXYL0',authDomain:'smart-cafeteria-8a2ce.firebaseapp.com',databaseURL:'https://smart-cafeteria-8a2ce-default-rtdb.firebaseio.com',projectId:'smart-cafeteria-8a2ce',storageBucket:'smart-cafeteria-8a2ce.firebasestorage.app',messagingSenderId:'304671336012',appId:'1:304671336012:web:0fd90cf8e6cc06884176e9'};
+    const db=getDatabase(initializeApp(firebaseConfig));
+    const body=document.querySelector('#menuBody'), status=document.querySelector('#menuStatus'), refresh=document.querySelector('#refresh');
+    const categories=[['밥','🍚','밥'],['국','🍲','국·찌개'],['김치','🥬','반찬']];
+    const escapeHtml=value=>String(value??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+    const formatDate=value=>{const date=value?new Date(`${value}T00:00:00`):new Date();return new Intl.DateTimeFormat('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'short'}).format(date)};
+    async function loadMenu(){
+      refresh.disabled=true;status.textContent='불러오는 중';body.innerHTML='<div class="state"><div class="big">🍽️</div><p>오늘의 식단을 불러오는 중입니다.</p></div>';
+      try{
+        const data=(await get(ref(db,'menu'))).val()||{};
+        document.querySelector('#displayDate').textContent=formatDate(data.date);
+        const foods=categories.map(([key,emoji,label])=>({emoji,label,name:String(data[key]||'').trim()})).filter(item=>item.name);
+        if(!foods.length){status.textContent='등록 대기';body.innerHTML='<div class="state"><div class="big">🌿</div><p>오늘 등록된 식단이 없습니다.<br>잠시 후 다시 확인해 주세요.</p></div>';return;}
+        status.textContent='실시간 연동';
+        body.innerHTML='<div class="menu-list">'+foods.map(item=>`<article class="item"><span class="food-icon">${item.emoji}</span><div class="food-copy"><span>${item.label}</span><strong>${escapeHtml(item.name)}</strong></div></article>`).join('')+'</div><p class="notice">식단은 재료 수급과 급식 운영 상황에 따라 변경될 수 있습니다.</p>';
+      }catch(error){console.error(error);status.textContent='연결 오류';body.innerHTML='<div class="state error"><div class="big">⚠️</div><p>식단 정보를 불러오지 못했습니다.<br>네트워크 연결 후 다시 시도해 주세요.</p></div>';}
+      finally{refresh.disabled=false;}
+    }
+    refresh.addEventListener('click',loadMenu);loadMenu();
+  </script>
+</body>
+</html>
