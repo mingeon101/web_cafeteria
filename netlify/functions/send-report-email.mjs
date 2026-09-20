@@ -1,6 +1,5 @@
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-// 도메인 인증 전에는 Resend의 기본 테스트 발신 주소를 사용합니다.
-const FROM = process.env.RESEND_FROM || 'Smart Cafeteria <onboarding@resend.dev>';
+const FROM = process.env.RESEND_FROM;
 
 const json = (statusCode, body) => ({
   statusCode,
