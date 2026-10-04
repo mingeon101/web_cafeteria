@@ -4610,5 +4610,273 @@ ${JSON.stringify(summary)}
     init();
 
   </script>
+<!-- AUTO-SEAT-ARRIVAL:START -->
+<style>#arrival-root{font-family:'Noto Sans KR',sans-serif;color:#143c4d}#arrival-root [hidden]{display:none!important}#arrival-overlay{position:fixed;inset:0;z-index:950;background:#17344090;display:flex;align-items:center;justify-content:center;padding:20px}#arrival-panel{background:#f6fcff;border-radius:24px;padding:32px;width:min(560px,100%);text-align:center;box-shadow:0 12px 70px #0c293960}#arrival-panel h2{font-size:25px;margin-bottom:12px}#arrival-name{color:#507383;font-size:15px}#arrival-seat{font-size:clamp(32px,9vw,62px);font-weight:900;color:#246a87;margin:24px 0;overflow-wrap:anywhere}#arrival-detail,#arrival-message{font-size:15px;line-height:1.8;margin:12px 0;white-space:pre-wrap}.arrival-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:22px}#arrival-root button,.arrival-badge button{padding:12px 16px;border:1px solid #9dbfce;background:white;color:#184a5f;border-radius:12px;font:inherit;cursor:pointer}#arrival-continue{background:#367f9c!important;color:white!important}#arrival-root button:disabled{opacity:.5}.arrival-badge{margin:16px;padding:16px;border:1px solid #9ac0ca;border-radius:14px;background:#e3f8f3;display:flex;gap:12px;align-items:center;flex-wrap:wrap}.arrival-badge[hidden]{display:none}.arrival-badge strong{font-size:24px;color:#206051}.arrival-badge span{font-size:13px}.arrival-badge button{margin-left:auto;font-size:13px}
+</style>
+<script>
+/* 추가 기능 전용. 기존 학생 신청 코드의 변수와 함수를 변경하지 않습니다. */
+(function(global){
+  'use strict';
+  const fail=message=>{throw new Error(message);};
+  const copy=value=>JSON.parse(JSON.stringify(value));
+  const count=value=>Object.keys(value||{}).length;
+  const dayKey=(now=Date.now())=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul'}).format(now);
+  const timeAt=(date,time)=>Date.parse(`${date}T${time}:00+09:00`);
+  function profile(p){
+    if(!p||!/^[-_a-zA-Z0-9]+$/.test(p.uid||''))fail('학생 식별 정보를 확인하세요.');
+    const result={uid:p.uid,name:String(p.name||'학생').slice(0,60),grade:Number(p.grade),classNum:Number(p.classNum),number:Number(p.number)};
+    if(![result.grade,result.classNum,result.number].every(n=>Number.isInteger(n)&&n>0&&n<1000))fail('학년·반·번호를 확인하세요.');
+    return result;
+  }
+  function config(raw){
+    if(!raw||raw.enabled!==true)fail('좌석예약 시간표가 아직 열리지 않았습니다. 설정 안내에 따라 시간표를 등록하세요.');
+    const slots=Object.entries(raw.slots||{}).map(([id,s])=>({id,label:String(s.label||`${s.start} ~ ${s.end}`).slice(0,60),start:s.start,end:s.end})).sort((a,b)=>String(a.start).localeCompare(String(b.start)));
+    if(!slots.length||slots.length>20)fail('예약 시간대를 1~20개 등록하세요.');
+    for(let i=0;i<slots.length;i++){
+      const s=slots[i];
+      if(!/^[-_a-zA-Z0-9]+$/.test(s.id)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(s.start)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(s.end)||s.start>=s.end)fail('예약 시간표 형식을 확인하세요.');
+      if(i&&slots[i-1].end>s.start)fail('예약 시간대가 서로 겹칩니다.');
+    }
+    const maxFriends=raw.maxFriends??7,minOnsiteSeats=raw.minOnsiteSeats??0;
+    if(!Number.isInteger(maxFriends)||maxFriends<0||maxFriends>7)fail('친구 수 제한은 0~7명이어야 합니다.');
+    if(!Number.isInteger(minOnsiteSeats)||minOnsiteSeats<0)fail('현장 최소 좌석 수를 확인하세요.');
+    return {slots:Object.fromEntries(slots.map(s=>[s.id,s])),maxMembers:maxFriends+1,minOnsiteSeats};
+  }
+  function normalizeLayout(raw){
+    if(raw?.schemaVersion!==1||!raw.tables)fail('배치도 편집기에서 먼저 배치도를 저장하세요.');
+    const tables=copy(raw.tables),all=new Set();
+    if(!Number.isInteger(raw.columns)||!Number.isInteger(raw.rows)||raw.columns<6||raw.rows<6||raw.columns>60||raw.rows>60||!count(tables)||count(tables)>100)fail('배치도 크기가 올바르지 않습니다.');
+    for(const [id,t] of Object.entries(tables)){
+      if(t.id!==id||!/^t_[-_a-zA-Z0-9]+$/.test(id)||![0,90].includes(t.rotation)||![2,4,6,8].includes(t.capacity)||!['flex','reservation','onsite'].includes(t.zone))fail('테이블 설정을 확인하세요.');
+      if(!Number.isInteger(t.x)||!Number.isInteger(t.y)||t.x<0||t.y<0||t.x+(t.rotation===90?3:6)>raw.columns||t.y+(t.rotation===90?6:3)>raw.rows)fail('배치도에 경계를 벗어난 테이블이 있습니다.');
+      const seats={};for(let i=0;i<t.capacity;i++){
+        const half=t.capacity/2,x=1+(i%half)*4/Math.max(1,half-1),y=i<half?.35:2.65,seatId=`${id}_s${i+1}`;
+        seats[seatId]={id:seatId,number:i+1,x:t.x+(t.rotation===90?3-y:x),y:t.y+(t.rotation===90?x:y)};all.add(seatId);
+      }
+      t.seats=seats;t.label=String(t.label||id).slice(0,20);
+    }
+    const list=Object.values(tables);for(let i=0;i<list.length;i++)for(let j=i+1;j<list.length;j++){
+      const a=list[i],b=list[j],aw=a.rotation===90?3:6,ah=a.rotation===90?6:3,bw=b.rotation===90?3:6,bh=b.rotation===90?6:3;
+      if(a.x<b.x+bw&&a.x+aw>b.x&&a.y<b.y+bh&&a.y+ah>b.y)fail('배치도에 겹친 테이블이 있습니다.');
+    }
+    return {schemaVersion:1,name:String(raw.name||'급식실').slice(0,60),columns:raw.columns,rows:raw.rows,tables,totalSeats:all.size};
+  }
+  function allSeats(layout){return Object.values(layout.tables).flatMap(t=>Object.values(t.seats).map(s=>({...s,tableId:t.id,label:`${t.label}-${s.number}`,zone:t.zone})));}
+  function connected(layout,ids){
+    if(!ids.length)return false;const seats=Object.fromEntries(allSeats(layout).map(s=>[s.id,s]));if(ids.some(id=>!seats[id]))return false;
+    const adjacent=(a,b)=>{
+      if(a.tableId===b.tableId){const half=layout.tables[a.tableId].capacity/2,ai=a.number-1,bi=b.number-1;return (Math.floor(ai/half)===Math.floor(bi/half)&&Math.abs(ai-bi)===1)||Math.abs(ai-bi)===half;}
+      const t=layout.tables[a.tableId],u=layout.tables[b.tableId],tw=t.rotation===90?3:6,th=t.rotation===90?6:3,uw=u.rotation===90?3:6,uh=u.rotation===90?6:3;
+      const dx=Math.max(0,t.x-(u.x+uw),u.x-(t.x+tw)),dy=Math.max(0,t.y-(u.y+uh),u.y-(t.y+th));
+      const tableNear=(dx<=1&&Math.min(t.y+th,u.y+uh)>Math.max(t.y,u.y))||(dy<=1&&Math.min(t.x+tw,u.x+uw)>Math.max(t.x,u.x));
+      return tableNear&&Math.hypot(a.x-b.x,a.y-b.y)<=3.25;
+    };
+    const seen=new Set([ids[0]]),queue=[ids[0]];
+    while(queue.length){const a=queue.shift();for(const b of ids)if(!seen.has(b)&&adjacent(seats[a],seats[b])){seen.add(b);queue.push(b);}}
+    return seen.size===ids.length;
+  }
+  const pending=g=>Object.values(g.invites||{}).filter(i=>i.status==='pending');
+  function occupied(state,slotId,except){const result={};for(const g of Object.values(state.groups||{}))if(g.id!==except&&g.status==='reserved'&&g.slotId===slotId)for(const id of g.reservation.seatIds)result[id]=g.id;return result;}
+  function invitations(state,uid,now=Date.now()){return Object.values(state?.groups||{}).filter(g=>g.status==='forming'&&g.invites?.[uid]?.status==='pending'&&timeAt(state.meta.date,state.meta.slots[g.slotId].start)>now);}
+  function cancel(state,g,now){g.status='cancelled';g.updatedAt=now;for(const uid of Object.keys(g.members||{}))if(state.memberGroups[uid]===g.id)delete state.memberGroups[uid];for(const i of Object.values(g.invites||{}))if(i.status==='pending')i.status='cancelled';delete g.reservation;}
+  function apply(current,action,context){
+    const now=context.now??Date.now(),actor=profile(action.actor);
+    if(context.date!==dayKey(now))fail('날짜가 변경되었습니다. 새로고침 후 다시 진행하세요.');
+    let state=current?copy(current):{schemaVersion:1,meta:{date:context.date,layoutVersionId:context.layoutVersionId,layout:normalizeLayout(context.layout),...config(context.config)},groups:{},memberGroups:{}};
+    state.groups=state.groups||{};state.memberGroups=state.memberGroups||{};
+    if(state.schemaVersion!==1||state.meta.date!==context.date)fail('예약 데이터의 날짜나 버전을 확인하세요.');
+    const own=state.groups[state.memberGroups[actor.uid]],g=state.groups[action.groupId];
+    const open=group=>{if(!group||group.status!=='forming')fail('모집 중인 그룹이 아닙니다.');if(timeAt(context.date,state.meta.slots[group.slotId].start)<=now)fail('예약 시간이 지났습니다.');};
+    const leader=()=>{if(!g||g.leaderUid!==actor.uid)fail('그룹을 만든 학생만 진행할 수 있습니다.');};
+    switch(action.type){
+      case 'create':{
+        if(own)fail('이미 오늘의 예약 그룹이 있습니다. 먼저 기존 그룹을 취소하거나 나가세요.');
+        const slot=state.meta.slots[action.slotId];if(!slot||timeAt(context.date,slot.start)<=now)fail('선택한 시간에는 예약할 수 없습니다.');
+        if(!/^[-_a-zA-Z0-9]+$/.test(action.groupId||'')||g)fail('그룹 식별자가 중복되었습니다. 다시 시도하세요.');
+        state.groups[action.groupId]={id:action.groupId,leaderUid:actor.uid,slotId:action.slotId,status:'forming',createdAt:now,updatedAt:now,members:{[actor.uid]:actor},invites:{}};state.memberGroups[actor.uid]=action.groupId;break;
+      }
+      case 'invite':{
+        leader();open(g);const recipient=profile(action.recipient);g.invites=g.invites||{};
+        if(recipient.uid===actor.uid||g.members[recipient.uid])fail('본인이나 이미 참여한 친구는 초대할 수 없습니다.');
+        if(state.memberGroups[recipient.uid])fail('이 친구는 이미 다른 그룹 또는 좌석예약에 참여 중입니다.');
+        if(g.invites[recipient.uid]?.status==='pending')fail('이미 초대한 친구입니다.');
+        if(count(g.members)+pending(g).length>=state.meta.maxMembers)fail(`본인 포함 최대 ${state.meta.maxMembers}명입니다. 대기 중인 초대도 인원에 포함됩니다.`);
+        g.invites[recipient.uid]={recipient,status:'pending',createdAt:now};g.updatedAt=now;break;
+      }
+      case 'accept':{
+        open(g);if(g.invites?.[actor.uid]?.status!=='pending')fail('유효한 초대가 아닙니다.');
+        if(own)fail('이미 참여한 그룹이 있습니다. 먼저 기존 그룹을 나가거나 취소하세요.');
+        if(count(g.members)>=state.meta.maxMembers)fail('그룹 인원이 가득 찼습니다.');
+        g.members[actor.uid]=actor;state.memberGroups[actor.uid]=g.id;g.invites[actor.uid].status='accepted';g.invites[actor.uid].respondedAt=now;
+        for(const other of Object.values(state.groups))if(other.id!==g.id&&other.invites?.[actor.uid]?.status==='pending')other.invites[actor.uid].status='declined';
+        g.updatedAt=now;break;
+      }
+      case 'decline':{
+        open(g);if(g.invites?.[actor.uid]?.status!=='pending')fail('유효한 초대가 아닙니다.');g.invites[actor.uid].status='declined';g.invites[actor.uid].respondedAt=now;break;
+      }
+      case 'revoke':{
+        leader();open(g);if(g.invites?.[action.recipientUid]?.status!=='pending')fail('대기 중인 초대가 아닙니다.');g.invites[action.recipientUid].status='cancelled';break;
+      }
+      case 'leave':{
+        open(g);if(!g.members[actor.uid]||g.leaderUid===actor.uid)fail('참여 중인 친구만 나갈 수 있습니다.');delete g.members[actor.uid];delete state.memberGroups[actor.uid];if(g.invites?.[actor.uid])g.invites[actor.uid].status='left';break;
+      }
+      case 'cancel':{
+        leader();if(!['forming','reserved'].includes(g.status))fail('이미 취소된 그룹입니다.');cancel(state,g,now);break;
+      }
+      case 'book':{
+        leader();open(g);if(pending(g).length)fail('친구의 응답을 기다리거나 대기 초대를 취소한 뒤 좌석을 선택하세요.');
+        const ids=action.seatIds||[],members=Object.keys(g.members).sort((a,b)=>a===g.leaderUid?-1:b===g.leaderUid?1:a.localeCompare(b));
+        if(ids.length!==members.length||new Set(ids).size!==ids.length)fail(`참여한 ${members.length}명에 맞춰 서로 다른 좌석을 선택하세요.`);
+        const seats=Object.fromEntries(allSeats(state.meta.layout).map(s=>[s.id,s])),taken=occupied(state,g.slotId,g.id);
+        if(ids.some(id=>!seats[id]||seats[id].zone==='onsite'))fail('예약 가능한 좌석을 선택하세요. 현장 우선석은 예약할 수 없습니다.');
+        if(ids.some(id=>taken[id]))fail('다른 학생이 먼저 예약한 좌석이 있습니다. 빈자리를 다시 선택하세요.');
+        if(count(taken)+ids.length>state.meta.layout.totalSeats-state.meta.minOnsiteSeats)fail('현장 이용자를 위해 남겨야 하는 좌석 수를 초과했습니다.');
+        if(!connected(state.meta.layout,ids))fail('서로 이어진 좌석을 선택하세요. 한 테이블 또는 바로 인접한 테이블에서 함께 앉을 수 있습니다.');
+        g.status='reserved';g.updatedAt=now;g.reservation={layoutVersionId:state.meta.layoutVersionId,seatIds:ids,assignments:Object.fromEntries(members.map((uid,i)=>[uid,ids[i]])),createdAt:now};break;
+      }
+      default:fail('지원하지 않는 요청입니다.');
+    }
+    return state;
+  }
+  global.CafeteriaSeatCore={dayKey,timeAt,profile,config,normalizeLayout,allSeats,connected,pending,occupied,invitations,apply};
+})(typeof window==='undefined'?globalThis:window);
+
+
+</script>
+<script>
+(function(global){
+ 'use strict';const C=global.CafeteriaSeatCore,fail=m=>{throw Error(m)},clone=x=>JSON.parse(JSON.stringify(x));
+ function initialize(state,ctx){return state?clone(state):{schemaVersion:1,meta:{date:ctx.date,layoutVersionId:ctx.layoutVersionId,layout:C.normalizeLayout(ctx.layout),...C.config(ctx.config)},groups:{},memberGroups:{}};}
+ function occupied(state,slotId,exceptUid){
+  const held=new Set();for(const g of Object.values(state.groups||{}))if(g.status==='reserved'&&g.slotId===slotId){
+   for(const [uid,id] of Object.entries(g.reservation?.assignments||{})){
+    const visit=state.arrivals?.[uid];if(uid===exceptUid)continue;
+    if(visit?.status==='released'&&visit.groupId===g.id)continue;held.add(id);
+   }
+  }
+  for(const [uid,v] of Object.entries(state.arrivals||{}))if(uid!==exceptUid&&v.status==='seated')held.add(v.seatId);
+  return held;
+ }
+ function arrive(current,ctx){
+  const p=C.profile(ctx.student),now=ctx.now??Date.now();if(C.dayKey(now)!==ctx.date)fail('날짜가 바뀌었습니다. 학생을 다시 확인하세요.');
+  const state=initialize(current,ctx);if(state.meta?.date!==ctx.date)fail('좌석 데이터 날짜가 맞지 않습니다.');
+  state.groups??={};state.memberGroups??={};state.arrivals??={};
+  const old=state.arrivals[p.uid],seats=C.allSeats(state.meta.layout),seatById=Object.fromEntries(seats.map(s=>[s.id,s]));
+  if(old?.status==='seated'){if(!seatById[old.seatId])fail('기존 배정 좌석을 확인할 수 없습니다.');return {state,result:{...old,label:seatById[old.seatId].label,reused:true}};}
+  if(ctx.fulfilled)return {state:current,result:{status:'fulfilled',message:'오늘 선주문은 이미 배식 처리되었습니다. 추가 좌석을 배정하지 않았습니다.'}};
+  const currentGroup=state.groups[state.memberGroups[p.uid]],slotList=Object.values(state.meta.slots||{});
+  const currentSlot=slotList.find(s=>C.timeAt(ctx.date,s.start)<=now&&now<C.timeAt(ctx.date,s.end));
+  let groupId,seatId,slot,source;
+  if(currentGroup?.status==='reserved'&&currentGroup.reservation?.assignments?.[p.uid]&&!(old?.status==='released'&&old.groupId===currentGroup.id)){
+   slot=state.meta.slots[currentGroup.slotId];if(!slot)fail('예약 시간표가 없습니다.');
+   if(now<C.timeAt(ctx.date,slot.start))fail(`예약 시간은 ${slot.label}입니다. 예약 시간에 다시 확인하세요.`);
+   if(now<C.timeAt(ctx.date,slot.end)){
+    seatId=currentGroup.reservation.assignments[p.uid];groupId=currentGroup.id;source=currentGroup.mode==='onsite'?'onsite':'reservation';
+    if(!seatById[seatId])fail('예약한 좌석이 배치도에 없습니다.');
+    if(occupied(state,currentGroup.slotId,p.uid).has(seatId))fail('예약 좌석을 아직 다른 학생이 이용 중입니다. 빈자리로 임의 변경하지 않고 기다립니다.');
+   }
+  }
+  if(!seatId){
+   if(!currentSlot)fail('현재 이용 가능한 급식 시간대가 아닙니다.');
+   if(currentGroup?.status==='forming')fail('함께 앉기 그룹의 좌석이 아직 확정되지 않았습니다. 예약 화면에서 그룹을 확정하거나 취소한 뒤 다시 확인하세요.');
+   slot=currentSlot;const held=occupied(state,slot.id,p.uid),rank={onsite:0,flex:1,reservation:2};
+   const available=seats.filter(s=>!held.has(s.id)).sort((a,b)=>rank[a.zone]-rank[b.zone]||String(state.meta.layout.tables[a.tableId].label).localeCompare(String(state.meta.layout.tables[b.tableId].label),'ko',{numeric:true})||a.tableId.localeCompare(b.tableId)||a.number-b.number);
+   if(!available.length)fail('지금은 만석입니다. 좌석 반납 후 다시 확인하면 빈자리를 순서대로 배정합니다.');
+   seatId=available[0].id;groupId=`walkin_${p.uid}`;source='onsite';
+   state.groups[groupId]={id:groupId,leaderUid:p.uid,slotId:slot.id,status:'reserved',mode:'onsite',members:{[p.uid]:p},createdAt:now,reservation:{layoutVersionId:state.meta.layoutVersionId,seatIds:[seatId],assignments:{[p.uid]:seatId},createdAt:now}};
+   state.memberGroups[p.uid]=groupId;
+  }
+  const visit={status:'seated',groupId,slotId:slot.id,seatId,source,checkedInAt:now};state.arrivals[p.uid]=visit;
+  return {state,result:{...visit,label:seatById[seatId].label,reused:false}};
+ }
+ function release(current,uid,now=Date.now()){
+  if(!current?.arrivals?.[uid]||current.arrivals[uid].status!=='seated')fail('현재 사용 중인 좌석이 없습니다.');
+  const state=clone(current);state.arrivals[uid].status='released';state.arrivals[uid].releasedAt=now;return state;
+ }
+ global.CafeteriaArrivalCore={arrive,release,occupied};
+})(typeof window==='undefined'?globalThis:window);
+
+</script>
+<script>
+(function(){
+ 'use strict';
+ const C=window.CafeteriaSeatCore,A=window.CafeteriaArrivalCore,get=id=>document.getElementById(id);
+ const originalDashboard=showDashboard,originalStartServe=startServe;
+ let token=0,timer=null,visit=null,uid=null,busy=false,dispatching=false,context=null,observedUid=null;
+ const root=document.createElement('div');root.id='arrival-root';root.innerHTML=`<div id="arrival-overlay" hidden><section role="dialog" aria-modal="true" aria-labelledby="arrival-heading" tabindex="-1" id="arrival-panel"><h2 id="arrival-heading">좌석을 확인하고 있어요</h2><p id="arrival-name"></p><div id="arrival-seat">…</div><p id="arrival-detail"></p><p id="arrival-message" role="status" aria-live="polite"></p><div class="arrival-actions"><button id="arrival-continue" hidden>지금 배식 진행</button><button id="arrival-retry" hidden>다시 확인</button><button id="arrival-dashboard">대시보드 보기</button></div></section></div>`;
+ document.body.append(root);
+ const stop=()=>{clearInterval(timer);timer=null;};
+ const message=(s,error=false)=>{get('arrival-message').textContent=s;get('arrival-message').style.color=error?'#ae3d32':'#476676';};
+ function show(){get('arrival-overlay').hidden=false;get('arrival-panel').focus();}
+ function hide(){stop();get('arrival-overlay').hidden=true;}
+ function badge(){for(const id of ['page-dashboard','page-serve','page-progress','page-complete']){
+  let box=get(`arrival-${id}`);if(!box){box=document.createElement('div');box.id=`arrival-${id}`;box.className='arrival-badge';get(id)?.prepend(box);}box.replaceChildren();
+  if(visit?.seatId&&visit.status==='seated'&&user?.uid===uid){const text=document.createElement('strong');text.textContent=`내 좌석: ${visit.label}`;box.append(text);const detail=document.createElement('span');detail.textContent=visit.source==='reservation'?'사전예약 좌석':'현장 자동 배정';box.append(detail);
+   if(id==='page-complete'){const button=document.createElement('button');button.textContent='식사 후 좌석 반납';button.onclick=returnSeat;box.append(button);}
+   box.hidden=false;
+  }else box.hidden=true;
+ }}
+ async function setup(date){
+  const [stateSnap,cfgSnap]=await Promise.all([db.ref(`cafeteriaSeatReservations/days/${date}`).once('value'),db.ref('cafeteriaLayoutEditor/reservationConfig').once('value')]);
+  const state=stateSnap.val(),config=cfgSnap.val();if(config?.enabled!==true)throw Error('좌석 운영이 열려 있지 않습니다. 운영 시간표를 확인하세요.');
+  if(state?.meta)return {date,config,layout:state.meta.layout,layoutVersionId:state.meta.layoutVersionId};
+  C.config(config);let id=config.layoutVersionId,layout;
+  if(id){if(!/^[-_a-zA-Z0-9]+$/.test(id))throw Error('배치도 버전 ID가 올바르지 않습니다.');layout=(await db.ref(`cafeteriaLayoutEditor/layoutVersions/${id}`).once('value')).val();}
+  else{const items=(await db.ref('cafeteriaLayoutEditor/layoutVersions').orderByKey().limitToLast(1).once('value')).val()||{};id=Object.keys(items)[0];layout=items[id];}
+  return {date,config,layout:C.normalizeLayout(layout),layoutVersionId:id};
+ }
+ async function entry(){
+  if(!user?.uid||!systemOperating)return;const current=++token,student={...user},date=C.dayKey();stop();uid=student.uid;busy=true;visit=null;badge();show();
+  get('arrival-heading').textContent='선주문과 좌석을 확인하고 있어요';get('arrival-name').textContent=`${student.name} · ${userMeta(student)}`;get('arrival-seat').textContent='…';get('arrival-detail').textContent='';get('arrival-retry').hidden=true;get('arrival-continue').hidden=true;message('잠시만 기다려 주세요.');
+  try{
+   const [ctx,preorder]=await Promise.all([setup(date),db.ref(`students/${student.uid}/preorders/${date}`).once('value')]);if(current!==token||user?.uid!==student.uid)return;
+   context=ctx;todayPreorder=preorder.val();const ref=db.ref(`cafeteriaSeatReservations/days/${date}`);let result,error;
+   const transaction=await ref.transaction(state=>{try{const answer=A.arrive(state,{...ctx,student,fulfilled:todayPreorder?.status==='fulfilled',now:Date.now()});result=answer.result;error=null;return answer.state||undefined;}catch(e){error=e;return;}},undefined,false);
+   if(current!==token||user?.uid!==student.uid)return;
+   if(!transaction.committed&&result?.status!=='fulfilled')throw error||Error('좌석 확인 중 충돌이 발생했습니다. 다시 확인하세요.');
+   if(result?.status==='fulfilled'){get('arrival-heading').textContent='이미 배식이 완료되었어요';get('arrival-seat').textContent='배식 완료';message(result.message);return;}
+   visit=result;badge();get('arrival-heading').textContent=visit.source==='reservation'?'예약한 좌석으로 안내할게요':'빈 좌석을 자동 배정했어요';get('arrival-seat').textContent=visit.label;
+   const slot=transaction.snapshot.val().meta.slots[visit.slotId];get('arrival-detail').textContent=`${date} · ${slot.label}`;
+   if(todayPreorder?.status==='fulfilled'){message('이미 처리된 선주문입니다. 좌석만 안내하고 배식을 다시 등록하지 않습니다.');return;}
+   get('arrival-continue').hidden=false;let remaining=4;message(`${remaining}초 후 ${todayPreorder?'선주문으로 바로 배식을 진행':'기존 배식 수량 선택 화면으로 이동'}합니다.`);
+   timer=setInterval(()=>{if(current!==token||user?.uid!==student.uid||!systemOperating){stop();return;}remaining--;if(remaining<=0){stop();proceed();}else message(`${remaining}초 후 배식 절차로 이동합니다.`);},1000);
+  }catch(e){if(current===token){get('arrival-heading').textContent='좌석 안내를 확인해 주세요';get('arrival-seat').textContent='확인 필요';message(e.message,true);get('arrival-retry').hidden=false;}}
+  finally{if(current===token)busy=false;}
+ }
+ async function proceed(){
+  if(dispatching||busy)return;stop();if(!user?.uid||user.uid!==uid||!visit||!systemOperating)return;dispatching=true;get('arrival-continue').disabled=true;
+  const studentId=uid,current=token,ref=db.ref(`cafeteriaSeatReservations/days/${context.date}/arrivals/${studentId}`);let lock=null;
+  try{
+   // 화면 재진입 시 선주문 상태를 다시 읽어 이미 처리한 주문을 재사용하지 않습니다.
+   const latest=(await db.ref(`students/${studentId}/preorders/${context.date}`).once('value')).val();if(current!==token||user?.uid!==studentId)return;todayPreorder=latest;
+   if(latest?.status==='fulfilled'){message('이미 배식 처리된 선주문입니다. 좌석 안내만 유지합니다.');get('arrival-continue').hidden=true;return;}
+   if(latest){
+    lock=`dispatch_${Date.now()}_${Math.random().toString(36).slice(2)}`;const attempt=await ref.transaction(v=>{if(!v||v.status!=='seated'||v.dispatch)return;return {...v,dispatch:{id:lock,status:'processing'}};},undefined,false);
+    if(!attempt.committed)throw Error('이 학생의 선주문 배식이 이미 진행 중입니다. 중복 처리하지 않습니다.');
+   }
+   if(current!==token||user?.uid!==studentId)return;
+   await originalStartServe();
+   if(current===token)hide();
+  }catch(e){if(lock){try{const served=(await db.ref(`students/${studentId}/preorders/${context.date}`).once('value')).val()?.status==='fulfilled';if(!served)await ref.transaction(v=>{if(v?.dispatch?.id!==lock)return;const n={...v};delete n.dispatch;return n;},undefined,false);}catch{}}
+   if(current===token){show();message('배식 진행 실패: '+e.message,true);get('arrival-continue').hidden=false;}
+  }finally{dispatching=false;get('arrival-continue').disabled=false;}
+ }
+ async function returnSeat(){
+  if(!user?.uid||user.uid!==uid||!visit||busy)return;if(!confirm('실제로 식사를 마치고 자리를 비웠나요? 좌석을 반납합니다.'))return;
+  const current=token,studentId=uid,ctx=context;busy=true;
+  try{const ref=db.ref(`cafeteriaSeatReservations/days/${ctx.date}`);let error;const out=await ref.transaction(state=>{try{return A.release(state,studentId);}catch(e){error=e;return;}},undefined,false);if(!out.committed)throw error||Error('좌석 반납 실패');if(current===token){visit=null;badge();alert('좌석을 반납했습니다.');}}
+  catch(e){alert(e.message);}finally{if(current===token)busy=false;}
+ }
+ // 학생 확인 다음 동작만 확장합니다. 원래 대시보드/배식/카메라/제스처 함수는 유지합니다.
+ showDashboard=entry;
+ get('btn-start-serve').addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();if(visit?.status==='seated'&&user?.uid===uid)proceed();else entry();},true);
+ get('arrival-continue').onclick=proceed;get('arrival-retry').onclick=entry;
+ get('arrival-dashboard').onclick=()=>{token++;busy=false;hide();originalDashboard();};
+ // 자동 이동을 멈추고 대시보드로 돌아가도 배정 좌석은 유지합니다.
+ setInterval(()=>{const next=user?.uid||null;if(observedUid!==next){observedUid=next;if(uid&&next!==uid){token++;stop();visit=null;uid=null;busy=false;hide();badge();}}if(!systemOperating)stop();},200);
+})();
+
+</script>
+<!-- AUTO-SEAT-ARRIVAL:END -->
 </body>
 </html>
