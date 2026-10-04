@@ -1,0 +1,85 @@
+{
+  "rules": {
+    "cafeteriaLayoutEditor": {
+      "layoutVersions": {
+        ".read": true,
+        "$versionId": {
+          ".write": "!data.exists() && newData.exists()",
+          ".validate": "newData.hasChildren(['schemaVersion','name','columns','rows','tables','totalSeats','createdAt'])",
+          "schemaVersion": {
+            ".validate": "newData.val() === 1"
+          },
+          "name": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 60"
+          },
+          "columns": {
+            ".validate": "newData.isNumber() && newData.val() >= 6 && newData.val() <= 60 && newData.val() % 1 === 0"
+          },
+          "rows": {
+            ".validate": "newData.isNumber() && newData.val() >= 6 && newData.val() <= 60 && newData.val() % 1 === 0"
+          },
+          "totalSeats": {
+            ".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 800 && newData.val() % 2 === 0"
+          },
+          "createdAt": {
+            ".validate": "newData.isNumber() && newData.val() === now"
+          },
+          "tables": {
+            ".validate": "newData.hasChildren()",
+            "$tableId": {
+              ".validate": "newData.hasChildren(['id','label','x','y','rotation','capacity','zone','seats'])",
+              "id": {
+                ".validate": "newData.val() === $tableId"
+              },
+              "label": {
+                ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 20"
+              },
+              "x": {
+                ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() % 1 === 0 && newData.val() + (newData.parent().child('rotation').val() === 90 ? 3 : 6) <= newData.parent().parent().parent().child('columns').val()"
+              },
+              "y": {
+                ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() % 1 === 0 && newData.val() + (newData.parent().child('rotation').val() === 90 ? 6 : 3) <= newData.parent().parent().parent().child('rows').val()"
+              },
+              "rotation": {
+                ".validate": "newData.val() === 0 || newData.val() === 90"
+              },
+              "capacity": {
+                ".validate": "newData.val() === 2 || newData.val() === 4 || newData.val() === 6 || newData.val() === 8"
+              },
+              "zone": {
+                ".validate": "newData.val() === 'flex' || newData.val() === 'reservation' || newData.val() === 'onsite'"
+              },
+              "seats": {
+                ".validate": "newData.hasChildren()",
+                "$seatId": {
+                  ".validate": "newData.hasChildren(['id','number','x','y'])",
+                  "id": {
+                    ".validate": "newData.val() === $seatId"
+                  },
+                  "number": {
+                    ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 8 && newData.val() % 1 === 0"
+                  },
+                  "x": {
+                    ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 60"
+                  },
+                  "y": {
+                    ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 60"
+                  },
+                  "$other": {
+                    ".validate": false
+                  }
+                }
+              },
+              "$other": {
+                ".validate": false
+              }
+            }
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    }
+  }
+}
