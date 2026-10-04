@@ -3258,5 +3258,298 @@ async function recognizeFace() {
 })();
 </script>
 
+<!-- SEAT-RESERVATION-ADDON:START -->
+<style>
+#sr-root{font-family:'Noto Sans KR',sans-serif;color:#173744;font-size:14px}#sr-root [hidden]{display:none!important}#sr-root button,#sr-root input,#sr-root select{font:inherit}#sr-root button{border:1px solid #b8d5df;border-radius:10px;background:white;color:#254551;padding:9px 12px;cursor:pointer}#sr-root button:disabled{opacity:.5;cursor:not-allowed}#sr-root button.sr-primary{background:#347e99;color:white;border-color:#347e99}#sr-launch{position:fixed;right:18px;bottom:22px;z-index:800;box-shadow:0 6px 22px #29465340;padding:14px 20px!important;font-weight:700!important}#sr-badge{display:inline-grid;place-items:center;background:#d64848;color:white;border-radius:20px;min-width:23px;margin-left:6px}#sr-overlay{position:fixed;inset:0;z-index:900;background:#12303c80;display:flex;align-items:center;justify-content:center;padding:16px}#sr-panel{background:#f7fbfd;border-radius:20px;width:min(1040px,100%);max-height:94vh;overflow:auto;padding:22px;box-shadow:0 15px 80px #102a3540}#sr-root .sr-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:15px}#sr-root h2{font-size:23px;margin:0}#sr-root h3{font-size:17px;margin:0 0 12px}#sr-root p{line-height:1.65;margin:8px 0}#sr-root .sr-small{font-size:12px;color:#526a76}#sr-root .sr-box{padding:16px;background:white;border:1px solid #d7e5ed;border-radius:13px;margin:13px 0}#sr-root .sr-grid{display:grid;grid-template-columns:minmax(220px,300px) minmax(0,1fr);gap:16px}#sr-root label{display:block;font-size:13px;margin-bottom:10px}#sr-root input,#sr-root select{display:block;width:100%;border:1px solid #bbd3df;border-radius:8px;padding:9px;margin-top:5px;background:white;color:#193947}#sr-root .sr-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}#sr-root .sr-student-fields{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}#sr-message{padding:12px 14px;white-space:pre-wrap;border-radius:10px;background:#e5f1f6;line-height:1.6;margin-bottom:13px}#sr-message.sr-error{background:#ffe9e5;color:#94422e}#sr-root .sr-person{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 0;border-bottom:1px solid #e7eef2}#sr-root .sr-person span{overflow-wrap:anywhere}#sr-root .sr-tag{font-size:12px;color:#39778a}#sr-root .sr-danger{color:#a34338}#sr-root .sr-invitation{border-left:4px solid #438aab;padding:12px;margin:10px 0;background:#edf6fc}#sr-map-scroll{max-width:100%;overflow:auto;border:1px solid #ccdfe7;border-radius:10px;max-height:54vh;background:white}#sr-map{position:relative;background-image:linear-gradient(#eaf2f6 1px,transparent 1px),linear-gradient(90deg,#eaf2f6 1px,transparent 1px);background-size:30px 30px}#sr-root .sr-table{position:absolute;background:#e4edf2;border:1px solid #b3c8d3;border-radius:6px;text-align:center;display:grid;place-items:center;font-size:11px;font-weight:bold;overflow:hidden;pointer-events:none}#sr-root .sr-seat{position:absolute;width:25px;height:25px;padding:0;border-radius:6px;background:#ebf6ff;border:1px solid #72a5c2;font-size:10px;transform:translate(-50%,-50%)}#sr-root .sr-seat[data-state=selected]{background:#276d98;color:white;border-color:#174567;opacity:1}#sr-root .sr-seat[data-state=taken]{background:#e8d5d5;color:#7c4c4c;border-color:#cdabab;opacity:1}#sr-root .sr-seat[data-state=onsite]{background:#e3f1e8;border-color:#a4cbb1;color:#386047;opacity:1}#sr-root .sr-seat[data-state=mine]{background:#f9e29a;color:#644b09;border-color:#b29a42;opacity:1}#sr-root .sr-seat:focus-visible{outline:3px solid #265271;outline-offset:2px}#sr-root .sr-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;margin:10px 0}#sr-root .sr-legend span:before{content:'';display:inline-block;width:11px;height:11px;border-radius:3px;background:var(--swatch);margin-right:4px}#sr-selection{font-size:13px;line-height:1.7;min-height:32px;margin:8px 0}#sr-toast{position:fixed;top:16px;right:16px;z-index:1000;max-width:min(390px,calc(100vw - 32px));background:#215b75;color:white;padding:16px;border-radius:12px;box-shadow:0 5px 30px #153a4a60}#sr-toast button{margin-top:9px}#sr-root .sr-reserved{border-left:4px solid #379279;padding:12px;background:#eaf8f1}#sr-root .sr-wide-button{width:100%;margin-top:8px}#sr-root .sr-date{font-weight:normal;font-size:13px;color:#56717e;margin-top:4px}#sr-root .sr-focus-note{padding:8px 0;color:#526a76;font-size:12px}#sr-root .sr-box ol{padding-left:20px}#sr-root .sr-box li{margin:7px 0;line-height:1.6}@media(max-width:730px){#sr-overlay{padding:8px}#sr-panel{padding:15px;max-height:97vh}#sr-root .sr-grid{grid-template-columns:1fr}#sr-launch{bottom:14px;right:12px}#sr-root h2{font-size:20px}#sr-map-scroll{max-height:45vh}}
+
+</style>
+<script>
+/* 추가 기능 전용. 기존 학생 신청 코드의 변수와 함수를 변경하지 않습니다. */
+(function(global){
+  'use strict';
+  const fail=message=>{throw new Error(message);};
+  const copy=value=>JSON.parse(JSON.stringify(value));
+  const count=value=>Object.keys(value||{}).length;
+  const dayKey=(now=Date.now())=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul'}).format(now);
+  const timeAt=(date,time)=>Date.parse(`${date}T${time}:00+09:00`);
+  function profile(p){
+    if(!p||!/^[-_a-zA-Z0-9]+$/.test(p.uid||''))fail('학생 식별 정보를 확인하세요.');
+    const result={uid:p.uid,name:String(p.name||'학생').slice(0,60),grade:Number(p.grade),classNum:Number(p.classNum),number:Number(p.number)};
+    if(![result.grade,result.classNum,result.number].every(n=>Number.isInteger(n)&&n>0&&n<1000))fail('학년·반·번호를 확인하세요.');
+    return result;
+  }
+  function config(raw){
+    if(!raw||raw.enabled!==true)fail('좌석예약 시간표가 아직 열리지 않았습니다. 설정 안내에 따라 시간표를 등록하세요.');
+    const slots=Object.entries(raw.slots||{}).map(([id,s])=>({id,label:String(s.label||`${s.start} ~ ${s.end}`).slice(0,60),start:s.start,end:s.end})).sort((a,b)=>String(a.start).localeCompare(String(b.start)));
+    if(!slots.length||slots.length>20)fail('예약 시간대를 1~20개 등록하세요.');
+    for(let i=0;i<slots.length;i++){
+      const s=slots[i];
+      if(!/^[-_a-zA-Z0-9]+$/.test(s.id)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(s.start)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(s.end)||s.start>=s.end)fail('예약 시간표 형식을 확인하세요.');
+      if(i&&slots[i-1].end>s.start)fail('예약 시간대가 서로 겹칩니다.');
+    }
+    const maxFriends=raw.maxFriends??7,minOnsiteSeats=raw.minOnsiteSeats??0;
+    if(!Number.isInteger(maxFriends)||maxFriends<0||maxFriends>7)fail('친구 수 제한은 0~7명이어야 합니다.');
+    if(!Number.isInteger(minOnsiteSeats)||minOnsiteSeats<0)fail('현장 최소 좌석 수를 확인하세요.');
+    return {slots:Object.fromEntries(slots.map(s=>[s.id,s])),maxMembers:maxFriends+1,minOnsiteSeats};
+  }
+  function normalizeLayout(raw){
+    if(raw?.schemaVersion!==1||!raw.tables)fail('배치도 편집기에서 먼저 배치도를 저장하세요.');
+    const tables=copy(raw.tables),all=new Set();
+    if(!Number.isInteger(raw.columns)||!Number.isInteger(raw.rows)||raw.columns<6||raw.rows<6||raw.columns>60||raw.rows>60||!count(tables)||count(tables)>100)fail('배치도 크기가 올바르지 않습니다.');
+    for(const [id,t] of Object.entries(tables)){
+      if(t.id!==id||!/^t_[-_a-zA-Z0-9]+$/.test(id)||![0,90].includes(t.rotation)||![2,4,6,8].includes(t.capacity)||!['flex','reservation','onsite'].includes(t.zone))fail('테이블 설정을 확인하세요.');
+      if(!Number.isInteger(t.x)||!Number.isInteger(t.y)||t.x<0||t.y<0||t.x+(t.rotation===90?3:6)>raw.columns||t.y+(t.rotation===90?6:3)>raw.rows)fail('배치도에 경계를 벗어난 테이블이 있습니다.');
+      const seats={};for(let i=0;i<t.capacity;i++){
+        const half=t.capacity/2,x=1+(i%half)*4/Math.max(1,half-1),y=i<half?.35:2.65,seatId=`${id}_s${i+1}`;
+        seats[seatId]={id:seatId,number:i+1,x:t.x+(t.rotation===90?3-y:x),y:t.y+(t.rotation===90?x:y)};all.add(seatId);
+      }
+      t.seats=seats;t.label=String(t.label||id).slice(0,20);
+    }
+    const list=Object.values(tables);for(let i=0;i<list.length;i++)for(let j=i+1;j<list.length;j++){
+      const a=list[i],b=list[j],aw=a.rotation===90?3:6,ah=a.rotation===90?6:3,bw=b.rotation===90?3:6,bh=b.rotation===90?6:3;
+      if(a.x<b.x+bw&&a.x+aw>b.x&&a.y<b.y+bh&&a.y+ah>b.y)fail('배치도에 겹친 테이블이 있습니다.');
+    }
+    return {schemaVersion:1,name:String(raw.name||'급식실').slice(0,60),columns:raw.columns,rows:raw.rows,tables,totalSeats:all.size};
+  }
+  function allSeats(layout){return Object.values(layout.tables).flatMap(t=>Object.values(t.seats).map(s=>({...s,tableId:t.id,label:`${t.label}-${s.number}`,zone:t.zone})));}
+  function connected(layout,ids){
+    if(!ids.length)return false;const seats=Object.fromEntries(allSeats(layout).map(s=>[s.id,s]));if(ids.some(id=>!seats[id]))return false;
+    const adjacent=(a,b)=>{
+      if(a.tableId===b.tableId){const half=layout.tables[a.tableId].capacity/2,ai=a.number-1,bi=b.number-1;return (Math.floor(ai/half)===Math.floor(bi/half)&&Math.abs(ai-bi)===1)||Math.abs(ai-bi)===half;}
+      const t=layout.tables[a.tableId],u=layout.tables[b.tableId],tw=t.rotation===90?3:6,th=t.rotation===90?6:3,uw=u.rotation===90?3:6,uh=u.rotation===90?6:3;
+      const dx=Math.max(0,t.x-(u.x+uw),u.x-(t.x+tw)),dy=Math.max(0,t.y-(u.y+uh),u.y-(t.y+th));
+      const tableNear=(dx<=1&&Math.min(t.y+th,u.y+uh)>Math.max(t.y,u.y))||(dy<=1&&Math.min(t.x+tw,u.x+uw)>Math.max(t.x,u.x));
+      return tableNear&&Math.hypot(a.x-b.x,a.y-b.y)<=3.25;
+    };
+    const seen=new Set([ids[0]]),queue=[ids[0]];
+    while(queue.length){const a=queue.shift();for(const b of ids)if(!seen.has(b)&&adjacent(seats[a],seats[b])){seen.add(b);queue.push(b);}}
+    return seen.size===ids.length;
+  }
+  const pending=g=>Object.values(g.invites||{}).filter(i=>i.status==='pending');
+  function occupied(state,slotId,except){const result={};for(const g of Object.values(state.groups||{}))if(g.id!==except&&g.status==='reserved'&&g.slotId===slotId)for(const id of g.reservation.seatIds)result[id]=g.id;return result;}
+  function invitations(state,uid,now=Date.now()){return Object.values(state?.groups||{}).filter(g=>g.status==='forming'&&g.invites?.[uid]?.status==='pending'&&timeAt(state.meta.date,state.meta.slots[g.slotId].start)>now);}
+  function cancel(state,g,now){g.status='cancelled';g.updatedAt=now;for(const uid of Object.keys(g.members||{}))if(state.memberGroups[uid]===g.id)delete state.memberGroups[uid];for(const i of Object.values(g.invites||{}))if(i.status==='pending')i.status='cancelled';delete g.reservation;}
+  function apply(current,action,context){
+    const now=context.now??Date.now(),actor=profile(action.actor);
+    if(context.date!==dayKey(now))fail('날짜가 변경되었습니다. 새로고침 후 다시 진행하세요.');
+    let state=current?copy(current):{schemaVersion:1,meta:{date:context.date,layoutVersionId:context.layoutVersionId,layout:normalizeLayout(context.layout),...config(context.config)},groups:{},memberGroups:{}};
+    state.groups=state.groups||{};state.memberGroups=state.memberGroups||{};
+    if(state.schemaVersion!==1||state.meta.date!==context.date)fail('예약 데이터의 날짜나 버전을 확인하세요.');
+    const own=state.groups[state.memberGroups[actor.uid]],g=state.groups[action.groupId];
+    const open=group=>{if(!group||group.status!=='forming')fail('모집 중인 그룹이 아닙니다.');if(timeAt(context.date,state.meta.slots[group.slotId].start)<=now)fail('예약 시간이 지났습니다.');};
+    const leader=()=>{if(!g||g.leaderUid!==actor.uid)fail('그룹을 만든 학생만 진행할 수 있습니다.');};
+    switch(action.type){
+      case 'create':{
+        if(own)fail('이미 오늘의 예약 그룹이 있습니다. 먼저 기존 그룹을 취소하거나 나가세요.');
+        const slot=state.meta.slots[action.slotId];if(!slot||timeAt(context.date,slot.start)<=now)fail('선택한 시간에는 예약할 수 없습니다.');
+        if(!/^[-_a-zA-Z0-9]+$/.test(action.groupId||'')||g)fail('그룹 식별자가 중복되었습니다. 다시 시도하세요.');
+        state.groups[action.groupId]={id:action.groupId,leaderUid:actor.uid,slotId:action.slotId,status:'forming',createdAt:now,updatedAt:now,members:{[actor.uid]:actor},invites:{}};state.memberGroups[actor.uid]=action.groupId;break;
+      }
+      case 'invite':{
+        leader();open(g);const recipient=profile(action.recipient);g.invites=g.invites||{};
+        if(recipient.uid===actor.uid||g.members[recipient.uid])fail('본인이나 이미 참여한 친구는 초대할 수 없습니다.');
+        if(state.memberGroups[recipient.uid])fail('이 친구는 이미 다른 그룹 또는 좌석예약에 참여 중입니다.');
+        if(g.invites[recipient.uid]?.status==='pending')fail('이미 초대한 친구입니다.');
+        if(count(g.members)+pending(g).length>=state.meta.maxMembers)fail(`본인 포함 최대 ${state.meta.maxMembers}명입니다. 대기 중인 초대도 인원에 포함됩니다.`);
+        g.invites[recipient.uid]={recipient,status:'pending',createdAt:now};g.updatedAt=now;break;
+      }
+      case 'accept':{
+        open(g);if(g.invites?.[actor.uid]?.status!=='pending')fail('유효한 초대가 아닙니다.');
+        if(own)fail('이미 참여한 그룹이 있습니다. 먼저 기존 그룹을 나가거나 취소하세요.');
+        if(count(g.members)>=state.meta.maxMembers)fail('그룹 인원이 가득 찼습니다.');
+        g.members[actor.uid]=actor;state.memberGroups[actor.uid]=g.id;g.invites[actor.uid].status='accepted';g.invites[actor.uid].respondedAt=now;
+        for(const other of Object.values(state.groups))if(other.id!==g.id&&other.invites?.[actor.uid]?.status==='pending')other.invites[actor.uid].status='declined';
+        g.updatedAt=now;break;
+      }
+      case 'decline':{
+        open(g);if(g.invites?.[actor.uid]?.status!=='pending')fail('유효한 초대가 아닙니다.');g.invites[actor.uid].status='declined';g.invites[actor.uid].respondedAt=now;break;
+      }
+      case 'revoke':{
+        leader();open(g);if(g.invites?.[action.recipientUid]?.status!=='pending')fail('대기 중인 초대가 아닙니다.');g.invites[action.recipientUid].status='cancelled';break;
+      }
+      case 'leave':{
+        open(g);if(!g.members[actor.uid]||g.leaderUid===actor.uid)fail('참여 중인 친구만 나갈 수 있습니다.');delete g.members[actor.uid];delete state.memberGroups[actor.uid];if(g.invites?.[actor.uid])g.invites[actor.uid].status='left';break;
+      }
+      case 'cancel':{
+        leader();if(!['forming','reserved'].includes(g.status))fail('이미 취소된 그룹입니다.');cancel(state,g,now);break;
+      }
+      case 'book':{
+        leader();open(g);if(pending(g).length)fail('친구의 응답을 기다리거나 대기 초대를 취소한 뒤 좌석을 선택하세요.');
+        const ids=action.seatIds||[],members=Object.keys(g.members).sort((a,b)=>a===g.leaderUid?-1:b===g.leaderUid?1:a.localeCompare(b));
+        if(ids.length!==members.length||new Set(ids).size!==ids.length)fail(`참여한 ${members.length}명에 맞춰 서로 다른 좌석을 선택하세요.`);
+        const seats=Object.fromEntries(allSeats(state.meta.layout).map(s=>[s.id,s])),taken=occupied(state,g.slotId,g.id);
+        if(ids.some(id=>!seats[id]||seats[id].zone==='onsite'))fail('예약 가능한 좌석을 선택하세요. 현장 우선석은 예약할 수 없습니다.');
+        if(ids.some(id=>taken[id]))fail('다른 학생이 먼저 예약한 좌석이 있습니다. 빈자리를 다시 선택하세요.');
+        if(count(taken)+ids.length>state.meta.layout.totalSeats-state.meta.minOnsiteSeats)fail('현장 이용자를 위해 남겨야 하는 좌석 수를 초과했습니다.');
+        if(!connected(state.meta.layout,ids))fail('서로 이어진 좌석을 선택하세요. 한 테이블 또는 바로 인접한 테이블에서 함께 앉을 수 있습니다.');
+        g.status='reserved';g.updatedAt=now;g.reservation={layoutVersionId:state.meta.layoutVersionId,seatIds:ids,assignments:Object.fromEntries(members.map((uid,i)=>[uid,ids[i]])),createdAt:now};break;
+      }
+      default:fail('지원하지 않는 요청입니다.');
+    }
+    return state;
+  }
+  global.CafeteriaSeatCore={dayKey,timeAt,profile,config,normalizeLayout,allSeats,connected,pending,occupied,invitations,apply};
+})(typeof window==='undefined'?globalThis:window);
+
+
+</script>
+<script>
+/* 기존 스크립트 아래에 추가합니다. 기존 함수·이벤트·HTML을 재작성하지 않습니다. */
+(function(){
+  'use strict';
+  const C=window.CafeteriaSeatCore,$=id=>document.getElementById(id);
+  const root=document.createElement('div');root.id='sr-root';
+  root.innerHTML=`<button id="sr-launch" class="sr-primary" hidden>좌석예약 · 같이 앉기 <span id="sr-badge" hidden></span></button>
+  <div id="sr-toast" role="status" aria-live="polite" hidden><div id="sr-toast-text"></div><button id="sr-toast-open">확인하기</button><button id="sr-toast-dismiss">닫기</button></div>
+  <div id="sr-overlay" hidden><section id="sr-panel" role="dialog" aria-modal="true" aria-labelledby="sr-title" tabindex="-1">
+  <div class="sr-head"><div><h2 id="sr-title">좌석예약 · 같이 앉기</h2><div id="sr-date" class="sr-date"></div></div><button id="sr-close" aria-label="좌석예약 창 닫기">닫기 ✕</button></div>
+  <div id="sr-message" role="status" aria-live="polite">좌석 정보를 불러오는 중입니다.</div>
+  <section id="sr-inbox" class="sr-box" hidden><h3>친구에게 받은 초대</h3><div id="sr-invites"></div></section>
+  <div class="sr-grid"><div>
+    <section id="sr-new" class="sr-box"><h3>예약 시작</h3><label>급식 시간대<select id="sr-slot"></select></label><button id="sr-create" class="sr-primary sr-wide-button">혼자 예약 / 같이 앉기 시작</button><p class="sr-small">본인 포함 최대 8명. 그룹을 만든 학생이 모두의 좌석을 선택합니다.</p></section>
+    <section id="sr-group-box" class="sr-box" hidden><h3 id="sr-group-title">우리 그룹</h3><div id="sr-members"></div><div id="sr-pending"></div><p id="sr-group-note" class="sr-small"></p>
+    <button id="sr-show-invite" class="sr-wide-button">＋ 같이 앉기 · 친구 초대</button>
+    <form id="sr-invite-form" hidden><div class="sr-student-fields"><label>학년<input id="sr-grade" type="number" min="1" max="999" required></label><label>반<input id="sr-class" type="number" min="1" max="999" required></label><label>번호<input id="sr-number" type="number" min="1" max="999" required></label></div><button id="sr-send" class="sr-primary sr-wide-button">친구에게 초대 보내기</button></form>
+    <button id="sr-leave" class="sr-wide-button sr-danger">그룹 나가기</button><button id="sr-cancel" class="sr-wide-button sr-danger">그룹 취소</button></section>
+    <section id="sr-reservation" class="sr-box" hidden><h3>확정된 좌석</h3><div id="sr-assignment"></div></section>
+    <p class="sr-small">알림은 이 페이지에서 학생 확인을 마친 상태일 때 실시간으로 표시됩니다. 페이지를 닫은 동안 받은 초대는 다시 접속해 학생 확인 후 볼 수 있습니다.</p>
+  </div><div style="min-width:0"><section class="sr-box"><h3 id="sr-map-title">급식실 배치도</h3><div id="sr-map-scroll"><div id="sr-map"></div></div><div class="sr-legend"><span style="--swatch:#ebf6ff">예약 가능</span><span style="--swatch:#276d98">선택</span><span style="--swatch:#e8d5d5">예약 완료</span><span style="--swatch:#e3f1e8">현장 우선</span><span style="--swatch:#f9e29a">우리 그룹</span></div><p id="sr-selection"></p><button id="sr-book" class="sr-primary sr-wide-button" disabled>선택한 좌석으로 예약 확정</button><p class="sr-small">같은 테이블의 이어진 자리 또는 바로 인접한 테이블의 자리를 선택하세요. 떨어져 있는 좌석은 함께 예약할 수 없습니다.</p><p id="sr-layout-info" class="sr-small"></p></section></div></div>
+  <button id="sr-retry">연결 다시 확인</button>
+  </section></div>`;
+  document.body.append(root);
+  let actor=null,identity='',generation=0,subscription=null,configSubscription=null,dayState=null,seed=null,ready=false,busy=false,selected=[],seenInvites=new Set(),previousGroup=null,previousFocus=null,currentConfig=null;
+  const message=(text,error=false)=>{$('sr-message').textContent=text;$('sr-message').classList.toggle('sr-error',error);};
+  const person=p=>`${p.name} (${p.grade}학년 ${p.classNum}반 ${p.number}번)`;
+  const group=()=>dayState?.groups?.[dayState?.memberGroups?.[actor?.uid]];
+  const meta=()=>dayState?.meta||seed?.meta;
+  const operating=()=>typeof systemOperating==='undefined'||systemOperating;
+  function toast(text){if(!$('sr-overlay').hidden){message(text);$('sr-toast').hidden=true;return;}$('sr-toast-text').textContent=text;$('sr-toast').hidden=false;}
+  function open(){if(!actor)return;previousFocus=document.activeElement;$('sr-overlay').hidden=false;$('sr-panel').focus();render();}
+  function close(){$('sr-overlay').hidden=true;if(previousFocus?.isConnected)previousFocus.focus();}
+  $('sr-launch').onclick=open;$('sr-close').onclick=close;$('sr-toast-open').onclick=()=>{$('sr-toast').hidden=true;open();};$('sr-toast-dismiss').onclick=()=>$('sr-toast').hidden=true;
+  $('sr-overlay').addEventListener('click',e=>{if(e.target===$('sr-overlay'))close();});
+  $('sr-panel').addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();close();}if(e.key==='Tab'){const nodes=[...$('sr-panel').querySelectorAll('button,input,select,[tabindex]')].filter(x=>!x.disabled&&x.getClientRects().length);if(!nodes.length)return;if(e.shiftKey&&(document.activeElement===nodes[0]||document.activeElement===$('sr-panel'))){e.preventDefault();nodes.at(-1).focus();}else if(!e.shiftKey&&document.activeElement===nodes.at(-1)){e.preventDefault();nodes[0].focus();}}});
+  const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
+  function actionButton(label,fn){const b=el('button',label);b.type='button';b.disabled=busy;b.onclick=fn;return b;}
+  function detach(){if(subscription){subscription.ref.off('value',subscription.fn);subscription=null;}if(configSubscription){configSubscription.ref.off('value',configSubscription.fn);configSubscription=null;}}
+  function activeStudent(){
+    try{const page=document.querySelector('.page.active')?.id;if(!['page-preorder','page-final-confirm','page-complete'].includes(page))return null;return user?.uid?C.profile(user):null;}catch{return null;}
+  }
+  function syncIdentity(){
+    const next=activeStudent(),key=next?`${next.uid}/${C.dayKey()}`:'';
+    if(key===identity){$('sr-launch').disabled=!operating();return;}
+    identity=key;generation++;detach();actor=next;dayState=null;seed=null;ready=false;selected=[];seenInvites=new Set();previousGroup=null;busy=false;close();$('sr-toast').hidden=true;$('sr-badge').hidden=true;$('sr-invite-form').reset();$('sr-invite-form').hidden=true;$('sr-launch').hidden=!next;
+    if(next){$('sr-date').textContent=`${C.dayKey()} · ${person(next)}`;bootstrap(generation);}else render();
+  }
+  async function bootstrap(token){
+    ready=false;message('저장된 배치도와 예약 시간표를 불러오는 중입니다.');render();
+    try{
+      const date=C.dayKey(),[cfgSnap,stateSnap]=await Promise.all([db.ref('cafeteriaLayoutEditor/reservationConfig').once('value'),db.ref(`cafeteriaSeatReservations/days/${date}`).once('value')]);
+      if(token!==generation)return;
+      currentConfig=cfgSnap.val();const cfg=C.config(currentConfig);dayState=stateSnap.val();
+      let versionId=dayState?.meta?.layoutVersionId,layout=dayState?.meta?.layout;
+      if(!layout){
+        if(currentConfig.layoutVersionId){if(!/^[-_a-zA-Z0-9]+$/.test(currentConfig.layoutVersionId))throw Error('배치도 버전 ID가 올바르지 않습니다.');versionId=currentConfig.layoutVersionId;layout=(await db.ref(`cafeteriaLayoutEditor/layoutVersions/${versionId}`).once('value')).val();}
+        else{const layouts=(await db.ref('cafeteriaLayoutEditor/layoutVersions').orderByKey().limitToLast(1).once('value')).val()||{};versionId=Object.keys(layouts)[0];layout=layouts[versionId];}
+        layout=C.normalizeLayout(layout);
+      }
+      if(token!==generation)return;
+      seed={date,layoutVersionId:versionId,layout,config:currentConfig,meta:{date,layoutVersionId:versionId,layout,...cfg}};
+      const r=db.ref(`cafeteriaSeatReservations/days/${date}`);
+      const fn=s=>{if(token!==generation)return;dayState=s.val();ready=true;notifyChanges();render();};
+      subscription={ref:r,fn};r.on('value',fn,e=>{if(token!==generation)return;ready=false;message('예약 데이터 연결 실패: '+e.message,true);render();});
+      const cr=db.ref('cafeteriaLayoutEditor/reservationConfig');
+      const cf=s=>{if(token!==generation)return;currentConfig=s.val();if(currentConfig?.enabled!==true){message('관리자가 좌석예약을 잠시 닫았습니다.',true);}render();};
+      configSubscription={ref:cr,fn:cf};cr.on('value',cf,e=>{if(token!==generation)return;currentConfig=null;message('예약 설정 조회 실패: '+e.message,true);render();});
+      message('시간대를 선택해 그룹을 만들거나, 받은 친구 초대를 수락하세요.');render();
+    }catch(e){if(token!==generation)return;ready=false;message(e.message,true);render();}
+  }
+  function notifyChanges(){
+    if(!actor||!dayState)return;
+    const incoming=C.invitations(dayState,actor.uid);for(const g of incoming){const key=`${g.id}/${g.invites[actor.uid].createdAt}`;if(!seenInvites.has(key)){seenInvites.add(key);toast(`${g.members[g.leaderUid]?.name||'친구'}님이 같이 앉기에 초대했습니다. 수락 여부를 선택하세요.`);}}
+    const g=group();
+    if(g){if(g.status==='reserved'&&previousGroup?.status!=='reserved')toast('우리 그룹의 좌석예약이 확정되었습니다. 내 좌석을 확인하세요.');
+      if(g.leaderUid===actor.uid&&previousGroup?.id===g.id&&Object.keys(g.members).length>previousGroup.members)toast('친구가 초대를 수락했습니다. 인원이 모이면 좌석을 선택하세요.');
+      previousGroup={id:g.id,status:g.status,members:Object.keys(g.members).length};
+    }else if(previousGroup){toast('그룹이 취소되었거나 참여가 해제되었습니다. 좌석예약을 다시 시작할 수 있습니다.');previousGroup=null;selected=[];}
+  }
+  async function send(action){
+    if(busy)throw Error('이전 요청을 처리 중입니다.');if(!actor||!ready||!seed)throw Error('학생과 배치도 정보를 먼저 확인하세요.');if(!operating()||currentConfig?.enabled!==true)throw Error('현재 좌석예약을 이용할 수 없습니다.');if(!navigator.onLine)throw Error('인터넷 연결 후 다시 시도하세요.');
+    const token=generation,requestActor={...actor},requestDate=seed.date,request={...action,actor:requestActor},context={...seed,now:Date.now()};
+    busy=true;render();message('요청을 처리하고 있습니다.');
+    try{
+      const ref=db.ref(`cafeteriaSeatReservations/days/${requestDate}`);await ref.once('value');
+      if(token!==generation)throw Error('학생이 바뀌어 요청을 취소했습니다.');let rejected='';
+      const result=await ref.transaction(current=>{try{const next=C.apply(current,request,{...context,now:Date.now()});rejected='';return next;}catch(e){rejected=e.message;return;}},undefined,false);
+      if(!result.committed)throw Error(rejected||'동시에 변경된 내용이 있습니다. 다시 시도하세요.');
+      if(token===generation){dayState=result.snapshot.val();selected=[];notifyChanges();render();message({create:'그룹을 만들었습니다. 혼자 예약하거나 친구를 초대하세요.',invite:'초대를 전송했습니다. 상대방의 알림에 표시됩니다.',accept:'초대를 수락했습니다. 그룹장이 함께 앉을 좌석을 선택합니다.',decline:'초대를 거절했습니다.',revoke:'대기 초대를 취소했습니다.',leave:'그룹에서 나왔습니다.',cancel:'그룹과 좌석예약을 취소했습니다.',book:'좌석예약을 확정했습니다. 친구들도 각자의 좌석을 확인할 수 있습니다.'}[action.type]);}
+      return result.snapshot.val();
+    }finally{if(token===generation){busy=false;render();}}
+  }
+  function run(action){return send(action).catch(e=>message(e.message,true));}
+  function refreshSlots(){const m=meta(),select=$('sr-slot'),old=select.value;select.replaceChildren();for(const s of Object.values(m?.slots||{})){const option=new Option(s.label,s.id);option.disabled=C.timeAt(m.date,s.start)<=Date.now();select.add(option);}if([...select.options].some(o=>o.value===old&&!o.disabled))select.value=old;else select.value=[...select.options].find(o=>!o.disabled)?.value||'';}
+  function render(){
+    const m=meta(),g=group(),live=ready&&!!actor&&currentConfig?.enabled===true&&operating(),lead=g?.leaderUid===actor?.uid,forming=g?.status==='forming',upcoming=!!g&&!!m&&C.timeAt(m.date,m.slots[g.slotId].start)>Date.now();
+    const incoming=actor?C.invitations(dayState,actor.uid):[];$('sr-badge').hidden=!incoming.length;$('sr-badge').textContent=String(incoming.length);$('sr-inbox').hidden=!incoming.length;$('sr-invites').replaceChildren();
+    for(const invite of incoming){const box=el('div',undefined,'sr-invitation');box.append(el('p',`${person(invite.members[invite.leaderUid])}님의 초대`),el('p',m?.slots[invite.slotId]?.label||'', 'sr-small'));const row=el('div',undefined,'sr-row');const yes=actionButton('수락',()=>run({type:'accept',groupId:invite.id})),no=actionButton('거절',()=>run({type:'decline',groupId:invite.id}));yes.disabled=no.disabled=busy||!live;row.append(yes,no);box.append(row);$('sr-invites').append(box);}
+    $('sr-new').hidden=!!g;refreshSlots();$('sr-create').disabled=busy||!live||!$('sr-slot').value;
+    $('sr-group-box').hidden=!g;$('sr-reservation').hidden=g?.status!=='reserved';$('sr-members').replaceChildren();$('sr-pending').replaceChildren();
+    if(g){
+      $('sr-group-title').textContent=`우리 그룹 ${Object.keys(g.members).length}/${m.maxMembers}명 · ${m.slots[g.slotId].label}`;
+      for(const p of Object.values(g.members)){const row=el('div',undefined,'sr-person');row.append(el('span',person(p)),el('span',p.uid===g.leaderUid?'그룹장':'참여 완료','sr-tag'));$('sr-members').append(row);}
+      for(const i of C.pending(g)){const row=el('div',undefined,'sr-person');row.append(el('span',`${person(i.recipient)} · 응답 대기`));if(lead)row.append(actionButton('초대 취소',()=>run({type:'revoke',groupId:g.id,recipientUid:i.recipient.uid})));$('sr-pending').append(row);}
+      $('sr-group-note').textContent=!upcoming&&forming?'시간이 지나 예약할 수 없습니다. 그룹을 취소하고 다시 시작하세요.':forming?(C.pending(g).length?'초대에 응답하지 않은 친구가 있습니다. 응답을 기다리거나 대기 초대를 취소하세요.':lead?'참여 인원에 맞는 붙어 있는 좌석을 선택하세요.':'그룹장이 좌석을 선택하면 예약 결과가 함께 표시됩니다.'):'좌석예약이 확정되었습니다. 변경하려면 그룹장이 전체 예약을 취소한 뒤 다시 예약하세요.';
+      $('sr-show-invite').hidden=!(lead&&forming&&upcoming);$('sr-show-invite').disabled=busy||!live||Object.keys(g.members).length+C.pending(g).length>=m.maxMembers;
+      if(!(lead&&forming&&upcoming))$('sr-invite-form').hidden=true;
+      $('sr-send').disabled=busy||!live||Object.keys(g.members).length+C.pending(g).length>=m.maxMembers;
+      $('sr-leave').hidden=lead||!forming;$('sr-cancel').hidden=!lead;$('sr-cancel').textContent=g.status==='reserved'?'그룹 전체 좌석예약 취소':'그룹 취소';$('sr-leave').disabled=$('sr-cancel').disabled=busy||!live;
+      if(g.status==='reserved'){
+        const seats=Object.fromEntries(C.allSeats(m.layout).map(s=>[s.id,s]));$('sr-assignment').replaceChildren(el('p',`${m.date} ${m.slots[g.slotId].label}`));
+        for(const [uid,id] of Object.entries(g.reservation.assignments))$('sr-assignment').append(el('p',`${uid===actor.uid?'내 자리 · ':''}${g.members[uid]?.name||'학생'}: ${seats[id]?.label||id}`,uid===actor.uid?'sr-reserved':''));
+      }
+    }
+    drawMap();
+  }
+  function drawMap(){
+    const m=meta(),g=group(),map=$('sr-map');map.replaceChildren();
+    if(!m){map.style.width='100%';map.style.height='150px';map.append(el('p','배치도와 시간표 등록 후 좌석이 표시됩니다.'));$('sr-book').disabled=true;$('sr-selection').textContent='';return;}
+    const slotId=g?.slotId||$('sr-slot').value,taken=C.occupied(dayState||{},slotId),mine=new Set(g?.reservation?.seatIds||[]),seats=C.allSeats(m.layout);
+    selected=selected.filter(id=>!taken[id]||mine.has(id));
+    const selectable=ready&&!busy&&currentConfig?.enabled===true&&operating()&&g?.leaderUid===actor?.uid&&g?.status==='forming'&&!C.pending(g).length&&C.timeAt(m.date,m.slots[g.slotId].start)>Date.now();
+    const n=Object.keys(g?.members||{}).length;map.style.width=m.layout.columns*30+'px';map.style.height=m.layout.rows*30+'px';$('sr-map-title').textContent=m.layout.name;
+    for(const t of Object.values(m.layout.tables)){const table=el('div',t.label,'sr-table');Object.assign(table.style,t.rotation===90?{left:(t.x*30+25)+'px',top:(t.y*30+12)+'px',width:'40px',height:'156px'}:{left:(t.x*30+12)+'px',top:(t.y*30+25)+'px',width:'156px',height:'40px'});map.append(table);}
+    for(const s of seats){const button=el('button',String(s.number),'sr-seat');button.type='button';button.dataset.seat=s.id;button.dataset.state=mine.has(s.id)?'mine':taken[s.id]?'taken':s.zone==='onsite'?'onsite':selected.includes(s.id)?'selected':'free';button.style.left=s.x*30+'px';button.style.top=s.y*30+'px';button.title=s.label;button.setAttribute('aria-label',`${s.label} · ${{mine:'우리 그룹',taken:'예약 완료',onsite:'현장 우선',selected:'선택됨',free:'예약 가능'}[button.dataset.state]}`);button.setAttribute('aria-pressed',String(selected.includes(s.id)));button.disabled=!selectable||!!taken[s.id]||s.zone==='onsite';button.onclick=()=>{if(selected.includes(s.id))selected=selected.filter(id=>id!==s.id);else if(selected.length<n)selected.push(s.id);else{message(`${n}명에 맞춰 ${n}석만 선택하세요.`,true);return;}drawMap();};map.append(button);}
+    $('sr-selection').textContent=g?.status==='reserved'?'노란색으로 표시된 좌석이 우리 그룹의 자리입니다.':`선택 ${selected.length} / ${n}석${selected.length?' · '+selected.map(id=>seats.find(s=>s.id===id)?.label).join(', '):''}`;
+    $('sr-book').disabled=!selectable||selected.length!==n||!C.connected(m.layout,selected);
+    $('sr-layout-info').textContent=`총 ${m.layout.totalSeats}석 · 현장 최소 ${m.minOnsiteSeats}석 유지 · 배치 버전 ${m.layoutVersionId}`;
+  }
+  $('sr-slot').onchange=()=>{selected=[];drawMap();$('sr-create').disabled=!ready||busy||!$('sr-slot').value;};
+  $('sr-create').onclick=()=>run({type:'create',groupId:db.ref('cafeteriaSeatReservations/groupKeys').push().key,slotId:$('sr-slot').value});
+  $('sr-show-invite').onclick=()=>{$('sr-invite-form').hidden=!$('sr-invite-form').hidden;if(!$('sr-invite-form').hidden)$('sr-grade').focus();};
+  $('sr-invite-form').onsubmit=async e=>{
+    e.preventDefault();if(busy)return;const token=generation,uid=actor?.uid,gid=group()?.id;const grade=Number($('sr-grade').value),classNum=Number($('sr-class').value),number=Number($('sr-number').value);
+    if(![grade,classNum,number].every(n=>Number.isInteger(n)&&n>0&&n<1000)){message('학년·반·번호를 올바르게 입력하세요.',true);return;}
+    busy=true;render();message('친구를 찾고 있습니다.');
+    try{
+      // 기존 students 자료형(숫자/문자열 및 한글 필드)을 모두 지원합니다.
+      const snap=await db.ref('students').once('value'),found=[];
+      snap.forEach(child=>{const s=child.val()||{};if(Number(s.grade??s['학년'])===grade&&Number(s.class??s.classNum??s.classNo??s['반'])===classNum&&Number(s.number??s['번호'])===number)found.push({uid:child.key,name:s.name||s['이름']||'학생',grade,classNum,number});});
+      if(token!==generation||actor?.uid!==uid)return;if(found.length!==1)throw Error(found.length?'동일한 학년·반·번호의 학생이 여러 명입니다. 등록 정보를 확인하세요.':'해당 학년·반·번호의 학생을 찾지 못했습니다.');
+      busy=false;await send({type:'invite',groupId:gid,recipient:found[0]});if(token===generation)$('sr-invite-form').reset();
+    }catch(err){if(token===generation)message(err.message,true);}finally{if(token===generation){busy=false;render();}}
+  };
+  $('sr-book').onclick=()=>run({type:'book',groupId:group()?.id,seatIds:[...selected]});
+  $('sr-cancel').onclick=()=>{if(confirm('우리 그룹과 좌석예약을 취소할까요? 친구들도 다시 예약해야 합니다.'))run({type:'cancel',groupId:group()?.id});};
+  $('sr-leave').onclick=()=>run({type:'leave',groupId:group()?.id});
+  $('sr-retry').onclick=()=>{if(busy)return;generation++;detach();bootstrap(generation);};
+  // 기존 user 및 페이지 상태를 관찰만 합니다. 기존 함수 재정의나 이벤트 교체 없음.
+  document.querySelectorAll('.page').forEach(page=>new MutationObserver(syncIdentity).observe(page,{attributes:true,attributeFilter:['class']}));
+  setInterval(syncIdentity,500);setInterval(()=>{if(actor&&!$('sr-overlay').hidden)render();},30000);
+  syncIdentity();
+})();
+
+
+</script>
+<!-- SEAT-RESERVATION-ADDON:END -->
 </body>
 </html>

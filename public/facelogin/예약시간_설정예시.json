@@ -1,0 +1,10 @@
+{
+  "enabled": true,
+  "maxFriends": 7,
+  "minOnsiteSeats": 0,
+  "slots": {
+    "lunch_1200": {"label": "12:00 ~ 12:20", "start": "12:00", "end": "12:20"},
+    "lunch_1220": {"label": "12:20 ~ 12:40", "start": "12:20", "end": "12:40"},
+    "lunch_1240": {"label": "12:40 ~ 13:00", "start": "12:40", "end": "13:00"}
+  }
+}

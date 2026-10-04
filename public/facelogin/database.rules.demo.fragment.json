@@ -1,0 +1,17 @@
+{
+  "rules": {
+    "cafeteriaLayoutEditor": {
+      "reservationConfig": {".read": true},
+      "layoutVersions": {".read": true}
+    },
+    "cafeteriaSeatReservations": {
+      "days": {
+        "$date": {
+          ".read": true,
+          ".write": "newData.exists()",
+          ".validate": "newData.hasChildren(['schemaVersion','meta']) && newData.child('schemaVersion').val() === 1 && newData.child('meta/date').val() === $date"
+        }
+      }
+    }
+  }
+}
