@@ -1,0 +1,27 @@
+'use strict';
+const qrCard=document.createElement('section');qrCard.className='qr-card';qrCard.innerHTML=`<div class="qr-title"><b>학생 확인</b><button id="qr-cancel" disabled>학생 선택 취소</button></div><strong id="qr-student">학년·반·번호를 입력하세요</strong><form id="student-form"><div class="student-fields"><label>학년<input id="student-grade" type="number" min="1" max="99" step="1" required inputmode="numeric"></label><label>반<input id="student-class" type="number" min="1" max="999" step="1" required inputmode="numeric"></label><label>번호<input id="student-number" type="number" min="1" max="999" step="1" required inputmode="numeric"></label></div><button id="student-confirm" class="primary" type="submit">학생 확인</button></form><p id="qr-status" role="status" aria-live="polite">학생 확인 후 식판을 놓으세요.</p>`;
+cameraCard.querySelector('.live-view').before(qrCard);
+let qrStudent=null,qrLookup=false,qrSequence=0;
+function qrMessage(text,error=false){$('qr-status').textContent=text;$('qr-status').classList.toggle('error',error);}
+function studentControls(){for(const id of ['student-grade','student-class','student-number','student-confirm'])$(id).disabled=qrLookup||!!qrStudent;$('qr-cancel').disabled=!qrLookup&&!qrStudent;}
+function resetStudent(message){qrSequence++;qrStudent=null;qrLookup=false;gate.stableSince=null;previous=null;$('qr-student').textContent='학생 정보를 입력해 주세요';studentControls();if(message)qrMessage(message);}
+async function studentRead(path){const r=await fetch(BASE+'/'+path,{cache:'no-store',signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error('학생 정보 조회 실패 (HTTP '+r.status+')');return r.json();}
+async function findStudent(grade,room,number,sequence){
+ const key=`${grade}-${room}-${number}`,ids=await studentRead('students.json?shallow=true');if(!ids||typeof ids!=='object'||Array.isArray(ids))return null;
+ const keys=Object.keys(ids).filter(StudentQRCore.validUid),matches=[];let cursor=0;
+ // Read only identity fields, excluding PINs, faces and reports.
+ await Promise.all(Array.from({length:Math.min(12,keys.length)},async()=>{while(cursor<keys.length&&sequence===qrSequence){const uid=keys[cursor++],lookup=await studentRead('students/'+encodeURIComponent(uid)+'/lookupKey.json');let match=typeof lookup==='string'&&lookup.split('-').map(Number).join('-')===key;
+ if(lookup===null){const prefix='students/'+encodeURIComponent(uid)+'/';const [g,c,n]=await Promise.all([studentRead(prefix+'grade.json'),studentRead(prefix+'classNo.json').then(async value=>value??await studentRead(prefix+'classNum.json')),studentRead(prefix+'number.json')]);match=Number(g)===grade&&Number(c)===room&&Number(n)===number;}
+ if(match)matches.push(uid);
+ }}));if(sequence!==qrSequence)return null;if(matches.length>1)throw Error('같은 학년·반·번호가 중복 등록되어 있습니다. 관리자에게 확인해 주세요.');if(!matches.length)return null;const uid=matches[0],name=await studentRead('students/'+encodeURIComponent(uid)+'/name.json');return{uid,name:typeof name==='string'?name.slice(0,80):'등록 학생',grade,room,number};
+}
+$('student-form').onsubmit=async e=>{e.preventDefault();if(qrStudent||qrLookup)return;const [grade,room,number]=['student-grade','student-class','student-number'].map(id=>Number($(id).value));if(![grade,room,number].every(Number.isInteger)||grade<1||grade>99||room<1||room>999||number<1||number>999){qrMessage('학년·반·번호를 올바른 양의 정수로 입력해 주세요.',true);return;}const sequence=++qrSequence;qrLookup=true;studentControls();qrMessage('학생을 찾고 있어요…');try{const student=await findStudent(grade,room,number,sequence);if(sequence!==qrSequence)return;if(!student)throw Error('등록된 학생이 없습니다. 학년·반·번호를 확인해 주세요.');qrStudent={...student,expiresAt:Date.now()+120000};$('qr-student').textContent=`${student.name} · ${grade}학년 ${room}반 ${number}번`;gate.prepareStudent();previous=null;if(running&&bg&&empty&&currentTab==='live'&&!$('armed').disabled)$('armed').checked=true;qrMessage(gate.waitClear?'이전 식판을 치운 뒤 새 식판을 놓으세요.':'식판을 가이드에 맞추고 잠시 멈춰 주세요.');}catch(error){if(sequence===qrSequence)qrMessage(error.message+' 저장을 진행하지 않습니다.',true);}finally{if(sequence===qrSequence){qrLookup=false;studentControls();}}};
+window.StudentQR={canAnalyze(){return !!qrStudent&&qrStudent.expiresAt>Date.now()&&currentTab==='live'&&!qrLookup;},takeSnapshot(){return this.canAnalyze()?{uid:qrStudent.uid,name:qrStudent.name}:null;},consume(uid){if(qrStudent?.uid!==uid)return;resetStudent('완료! 식판을 치우고 다음 학생 번호를 입력하세요.');$('student-number').value='';$('student-number').focus();}};
+$('qr-cancel').onclick=()=>resetStudent('학생 선택을 취소했어요. 학년·반·번호를 다시 입력해 주세요.');
+const qrOldStop=stop;stop=async function(){resetStudent('학생 정보를 다시 확인해 주세요.');await qrOldStop();};
+const qrOldTab=selectTab;selectTab=function(id){if(id==='setup')resetStudent('초기 설정 후 학생 정보를 다시 확인해 주세요.');qrOldTab(id);};
+document.addEventListener('visibilitychange',()=>{if(document.hidden)resetStudent('화면이 숨겨져 학생 선택을 해제했어요. 학생 정보를 다시 확인해 주세요.');});
+setInterval(()=>{if(qrStudent&&qrStudent.expiresAt<=Date.now())resetStudent('2분 동안 분석이 없어 학생 선택을 해제했어요. 다시 확인해 주세요.');},1000);
+const qrOldRender=render;render=function(data){qrOldRender(data);[...$('history').children].forEach((row,i)=>{const item=history[i];if(item?.studentId){const label=document.createElement('small');label.textContent='학생: '+(item.studentName||item.studentId);row.firstElementChild.append(label);}});};
+for(const p of historyCard.querySelectorAll('p'))if(p.textContent.includes('최근 기록'))p.textContent='학년·반·번호로 확인한 학생별로 Firebase에 저장됩니다. 이 목록은 이 브라우저의 최근 기록입니다. 저장 실패 기록도 원래 학생 ID를 유지해 재시도합니다.';
+render();
