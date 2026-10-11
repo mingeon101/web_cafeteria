@@ -1,0 +1,5 @@
+(function(root){'use strict';
+function validUid(value){return typeof value==='string'&&value.length>0&&value.length<=128&&!/[.#$\[\]\/\u0000-\u0020\u007f]/.test(value)&&!['__proto__','constructor','prototype'].includes(value);}
+function parse(text){if(typeof text!=='string'||text.length>2048)throw Error('QR 내용이 너무 길거나 올바르지 않습니다.');let value=text.trim();if(value.startsWith('{')){let obj;try{obj=JSON.parse(value);}catch{throw Error('QR의 학생 정보 형식을 확인해 주세요.');}value=obj.studentId??obj.uid;}else if(/^https?:\/\//i.test(value)){const url=new URL(value);value=url.searchParams.get('studentId')??url.searchParams.get('uid');}if(!validUid(value))throw Error('학생 고유 ID가 들어 있는 QR을 보여 주세요.');return value;}
+function path(entry){if(entry.studentId!==undefined){if(!validUid(entry.studentId))throw Error('저장할 학생 ID가 올바르지 않습니다.');return`students/${encodeURIComponent(entry.studentId)}/wasteReports/${entry.date}/${entry.id}`;}return`cafeteriaWasteScans/${entry.date}/${entry.id}`;}
+root.StudentQRCore={validUid,parse,path};})(globalThis);
