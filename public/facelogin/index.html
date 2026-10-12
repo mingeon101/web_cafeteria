@@ -771,7 +771,25 @@
       }
     }
   </style>
-</head>
+<style>.ms-panel{margin:22px 0;padding:24px;border:1px solid #e8e5f0;border-radius:20px;background:white}.ms-panel h2{font-size:22px;margin-bottom:12px}.ms-panel h3{font-size:17px;margin:20px 0 12px}.ms-panel p{font-size:13px;line-height:1.8;color:#716c83}.ms-panel select,.ms-panel input:not([type=checkbox]){padding:10px;border:1px solid #ddd;border-radius:9px;background:white;font:inherit;max-width:100%}.ms-panel label{display:block;margin:12px 0;font-size:14px}.ms-panel button{padding:11px 16px;border:0;border-radius:10px;background:#7358d6;color:white;font:inherit;cursor:pointer;margin:8px 5px 0 0}.ms-panel button:disabled{opacity:.5;cursor:not-allowed}.ms-panel [hidden]{display:none!important}.ms-table-wrap{overflow-x:auto}.ms-panel table{border-collapse:collapse;width:100%;font-size:14px}.ms-panel th,.ms-panel td{padding:12px;text-align:left;border-bottom:1px solid #eee}.ms-range{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.ms-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.ms-dinner-menu input{width:100%}.ms-check{display:flex!important;align-items:center;gap:9px}.ms-check input{width:18px;height:18px;accent-color:#7358d6}.ms-panel :focus-visible{outline:3px solid #7358d6;outline-offset:3px}@media(max-width:650px){.ms-panel{padding:17px}.ms-form-grid{grid-template-columns:1fr}.ms-panel td,.ms-panel th{padding:8px}.ms-range input{width:115px}}
+</style><script>(function(root){'use strict';
+const labels={elementary:'초등학교',middle:'중학교',high:'고등학교'};
+const count=t=>t==='elementary'?6:3;
+const timeOK=t=>typeof t==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(t);
+function windowOK(w){return w&&timeOK(w.start)&&timeOK(w.end)&&w.start<w.end;}
+function defaults(){return{schemaVersion:1,schoolType:'middle',gradeCount:3,dinnerEnabled:false,gradeScheduleEnabled:false,commonTimes:{lunch:{start:'12:00',end:'13:00'},dinner:{start:'18:00',end:'19:00'}},grades:Object.fromEntries(Array.from({length:6},(_,i)=>[String(i+1),{lunch:{start:'12:00',end:'13:00'},dinner:{start:'18:00',end:'19:00'}}]))};}
+function normalize(raw){if(raw==null)return defaults();if(raw.schemaVersion!==1||!Object.hasOwn(labels,raw.schoolType)||typeof raw.dinnerEnabled!=='boolean'||typeof raw.gradeScheduleEnabled!=='boolean')throw Error('저장된 급식 운영 설정을 확인해 주세요.');const out=defaults();out.schoolType=raw.schoolType;out.gradeCount=count(raw.schoolType);out.dinnerEnabled=raw.dinnerEnabled;out.gradeScheduleEnabled=raw.gradeScheduleEnabled;if(!windowOK(raw.commonTimes?.lunch)||(out.dinnerEnabled&&!windowOK(raw.commonTimes?.dinner)))throw Error('공통 급식 시간을 올바르게 입력해 주세요.');out.commonTimes={lunch:{...raw.commonTimes.lunch},dinner:windowOK(raw.commonTimes.dinner)?{...raw.commonTimes.dinner}:out.commonTimes.dinner};for(let g=1;g<=6;g++){const row=raw.grades?.[g];if(row){if(out.gradeScheduleEnabled&&g<=out.gradeCount&&(!windowOK(row.lunch)||(out.dinnerEnabled&&!windowOK(row.dinner))))throw Error(g+'학년 배식 시간 설정이 올바르지 않습니다.');out.grades[g]={lunch:windowOK(row.lunch)?{...row.lunch}:out.grades[g].lunch,dinner:windowOK(row.dinner)?{...row.dinner}:out.grades[g].dinner};}else if(out.gradeScheduleEnabled&&g<=out.gradeCount)throw Error(g+'학년 배식 시간이 없습니다.');}return out;}
+function validate(raw){const v=normalize(raw);const items=v.gradeScheduleEnabled?Array.from({length:v.gradeCount},(_,i)=>[String(i+1)+'학년',v.grades[i+1]]):[['공통',v.commonTimes]];for(const [label,row]of items)if(v.dinnerEnabled&&row.dinner.start<row.lunch.end)throw Error(label+' 석식은 중식 종료 이후로 설정해 주세요.');return v;}
+function forGrade(cfg,grade){if(!cfg.gradeScheduleEnabled)return cfg.commonTimes;return Number.isInteger(Number(grade))&&grade>=1&&grade<=cfg.gradeCount?cfg.grades[grade]:null;}
+root.MealServiceCore={labels,count,timeOK,windowOK,defaults,normalize,validate,forGrade};
+})(globalThis);
+</script><script>(function(root){
+const C=root.MealServiceCore;
+function reservation(base,cfg,meal){if(!cfg||!base)return base;const rows=cfg.gradeScheduleEnabled?Array.from({length:cfg.gradeCount},(_,i)=>cfg.grades[i+1][meal]):[cfg.commonTimes[meal]],start=rows.map(w=>w.start).sort()[0],end=rows.map(w=>w.end).sort().at(-1);if(meal==='dinner')return{...base,slots:{dinner:{start,end,label:'석식 '+start+' ~ '+end}}};const slots={};for(const [id,s]of Object.entries(base.slots||{})){const a=s.start>start?s.start:start,b=s.end<end?s.end:end;if(a<b)slots[id]={...s,start:a,end:b,label:a+' ~ '+b};}if(!Object.keys(slots).length)slots.lunch={start,end,label:'중식 '+start+' ~ '+end};return{...base,slots};}
+function sharedWindow(cfg,meal,members,slot){if(!cfg)return slot;let start=slot.start,end=slot.end;for(const p of members){const row=C.forGrade(cfg,p.grade);if(!row)throw Error('학교 구분과 친구의 학년을 확인하세요.');const w=row[meal];start=start>w.start?start:w.start;end=end<w.end?end:w.end;}if(start>=end)throw Error('같이 앉을 학생들의 배식 시간이 겹치지 않습니다. 다른 친구 또는 시간대를 선택하세요.');return{start,end};}
+root.MealIntegration={reservation,sharedWindow};
+})(globalThis);
+</script></head>
 
 <body>
 
@@ -1145,7 +1163,7 @@
 </div>
 
 
-<script>
+<section class="ms-panel" id="pm-panel"><label>신청할 급식<select id="pm-meal"><option value="lunch">중식</option><option value="dinner" hidden>석식</option></select></label><p id="pm-status" role="status">운영 설정을 불러오는 중…</p><p>학생 확인 전에 급식 구분을 선택하세요.</p></section><script>
 
 /* ============================================================
    FIREBASE
@@ -1298,8 +1316,21 @@ function goPage(name) {
    관리자 메뉴 동기화
 ============================================================ */
 
-db.ref("menu").on(
-  "value",
+let pmCfg=null,pmLoaded=false,pmMeal='lunch',pmCallback=null,pmRef=null,pmSnapshot=null,pmAllergyRef=null,pmAllergyCallback=null;
+const pmSelector=document.getElementById('pm-meal'),pmStatus=document.getElementById('pm-status');
+document.getElementById('app').prepend(document.getElementById('pm-panel'));
+function pmOrderDate(d){return pmMeal==='dinner'?d+'__dinner':d;}
+function pmSeatRoot(){return pmMeal==='dinner'?'cafeteriaSeatReservationsDinner':'cafeteriaSeatReservations';}
+function pmClock(){return new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date());}
+function pmAssert(){if(!pmLoaded)throw Error('운영 설정을 불러온 뒤 다시 시도하세요.');if(!systemOperating)throw Error('급식 신청 운영이 중지되었습니다.');if(pmMeal==='dinner'&&!pmCfg?.dinnerEnabled)throw Error('석식이 활성화되어 있지 않습니다.');if(pmCfg){const w=MealServiceCore.forGrade(pmCfg,user?.grade)?.[pmMeal];if(!w)throw Error('학생 학년을 확인하세요.');if(pmClock()>=w.start)throw Error('선주문은 배식 시작 전까지만 신청하거나 수정할 수 있습니다.');}if(pmMeal==='dinner'&&(pmSnapshot?.date!==todayDateKey()||!pmSnapshot?.밥||!pmSnapshot?.국||!pmSnapshot?.김치))throw Error('오늘 석식 메뉴가 아직 등록되지 않았습니다.');}
+function pmRender(){pmSelector.disabled=!!user?.uid||!pmLoaded;pmSelector.querySelector('[value=dinner]').hidden=!pmCfg?.dinnerEnabled;pmStatus.textContent=!pmLoaded?'급식 운영 설정을 확인할 수 없습니다.':pmCfg?MealServiceCore.labels[pmCfg.schoolType]+' · '+(pmMeal==='dinner'?'석식':'중식')+' · '+(pmCfg.gradeScheduleEnabled?'학년별 배식 시간 적용':'공통 급식 시간'):'중식 · 기존 운영 설정';}
+function pmBind(){if(pmRef&&pmCallback)pmRef.off('value',pmCallback);pmRef=db.ref(pmMeal==='dinner'?'menus/dinner':'menu');pmRef.on('value',pmCallback);if(pmAllergyCallback){if(pmAllergyRef)pmAllergyRef.off('value',pmAllergyCallback);pmAllergyRef=db.ref(pmMeal==='dinner'?'menuAllergiesDinner':'menuAllergies');pmAllergyRef.on('value',pmAllergyCallback);}}
+function pmObserveMenu(fn){pmCallback=s=>{pmSnapshot=s.val();fn(s);};pmBind();}
+function pmObserveAllergies(fn){pmAllergyCallback=fn;pmBind();}
+db.ref('cafeteriaSettings/mealService').on('value',s=>{try{pmCfg=s.exists()?MealServiceCore.normalize(s.val()):null;pmLoaded=true;pmRender();}catch(e){pmLoaded=false;pmStatus.textContent=e.message;}},e=>{pmLoaded=false;pmStatus.textContent='운영 설정 조회 실패: '+e.message;});
+pmSelector.onchange=()=>{if(user?.uid)return;pmMeal=pmSelector.value;if(pmMeal==='dinner'&&!pmCfg?.dinnerEnabled){pmMeal='lunch';pmSelector.value='lunch';}todayPreorder=null;pmBind();pmRender();};setInterval(pmRender,500);
+
+pmObserveMenu(
   snapshot => {
 
     const data =
@@ -1350,8 +1381,7 @@ function renderTodayMenu() {
    Firebase /menuAllergies
 ============================================================ */
 
-db.ref("menuAllergies").on(
-  "value",
+pmObserveAllergies(
   snapshot => {
 
     menuAllergies =
@@ -2464,7 +2494,7 @@ async function loadExistingPreorder() {
     const snapshot =
       await db
         .ref(
-          `students/${user.uid}/preorders/${todayDateKey()}`
+          `students/${user.uid}/preorders/${pmOrderDate(todayDateKey())}`
         )
         .once("value");
 
@@ -2778,6 +2808,7 @@ function changeFinalCount(
 ============================================================ */
 
 async function submitFinalPreorder() {
+  try{pmAssert();}catch(e){alert(e.message);return;}
 
   if (!user.uid) {
 
@@ -2831,6 +2862,9 @@ async function submitFinalPreorder() {
   */
 
   const preorderData = {
+    date: dateKey,
+    mealType: pmMeal,
+    menuSnapshot: {...menuLabels},
 
     name:
       user.name,
@@ -2863,25 +2897,14 @@ async function submitFinalPreorder() {
 
   try {
 
-    await Promise.all([
-
-      db
-        .ref(
-          `preorders/${dateKey}/${user.uid}`
-        )
-        .set(
-          preorderData
-        ),
-
-      db
-        .ref(
-          `students/${user.uid}/preorders/${dateKey}`
-        )
-        .set(
-          preorderData
-        )
-
-    ]);
+    const mirrorPath=`preorders/${pmOrderDate(dateKey)}/${user.uid}`;
+    const ownPath=`students/${user.uid}/preorders/${pmOrderDate(dateKey)}`;
+    const prior=(await db.ref(ownPath).once('value')).val();
+    if(prior?.status==='fulfilled')throw Error('이미 배식 처리된 신청은 수정할 수 없습니다.');
+    const seat=(await db.ref(`${pmSeatRoot()}/days/${dateKey}/arrivals/${user.uid}`).once('value')).val();
+    if(seat?.dispatch)throw Error('배식 처리 중에는 선주문을 변경할 수 없습니다.');
+    pmAssert();
+    await db.ref().update({[mirrorPath]:preorderData,[ownPath]:preorderData});
 
 
     todayPreorder =
@@ -3386,6 +3409,7 @@ async function recognizeFace() {
       }
       default:fail('지원하지 않는 요청입니다.');
     }
+    if(context.serviceSettings&&['create','invite','accept','book'].includes(action.type)){const group=state.groups[state.memberGroups[actor.uid]]||state.groups[action.groupId];if(group){const members=Object.values(group.members);if(action.type==='invite')members.push(action.recipient);MealIntegration.sharedWindow(context.serviceSettings,context.mealType||'lunch',members,state.meta.slots[group.slotId]);}}
     return state;
   }
   global.CafeteriaSeatCore={dayKey,timeAt,profile,config,normalizeLayout,allSeats,connected,pending,occupied,invitations,apply};
@@ -3436,7 +3460,7 @@ async function recognizeFace() {
     try{const page=document.querySelector('.page.active')?.id;if(!['page-preorder','page-final-confirm','page-complete'].includes(page))return null;return user?.uid?C.profile(user):null;}catch{return null;}
   }
   function syncIdentity(){
-    const next=activeStudent(),key=next?`${next.uid}/${C.dayKey()}`:'';
+    const next=activeStudent(),key=next?`${next.uid}/${C.dayKey()}/${pmMeal}`:'';
     if(key===identity){$('sr-launch').disabled=!operating();return;}
     identity=key;generation++;detach();actor=next;dayState=null;seed=null;ready=false;selected=[];seenInvites=new Set();previousGroup=null;busy=false;close();$('sr-toast').hidden=true;$('sr-badge').hidden=true;$('sr-invite-form').reset();$('sr-invite-form').hidden=true;$('sr-launch').hidden=!next;
     if(next){$('sr-date').textContent=`${C.dayKey()} · ${person(next)}`;bootstrap(generation);}else render();
@@ -3444,9 +3468,9 @@ async function recognizeFace() {
   async function bootstrap(token){
     ready=false;message('저장된 배치도와 예약 시간표를 불러오는 중입니다.');render();
     try{
-      const date=C.dayKey(),[cfgSnap,stateSnap]=await Promise.all([db.ref('cafeteriaLayoutEditor/reservationConfig').once('value'),db.ref(`cafeteriaSeatReservations/days/${date}`).once('value')]);
+      const date=C.dayKey(),[cfgSnap,stateSnap]=await Promise.all([db.ref('cafeteriaLayoutEditor/reservationConfig').once('value'),db.ref(`${pmSeatRoot()}/days/${date}`).once('value')]);
       if(token!==generation)return;
-      currentConfig=cfgSnap.val();const cfg=C.config(currentConfig);dayState=stateSnap.val();
+      currentConfig=MealIntegration.reservation(cfgSnap.val(),pmCfg,pmMeal);const cfg=C.config(currentConfig);dayState=stateSnap.val();
       let versionId=dayState?.meta?.layoutVersionId,layout=dayState?.meta?.layout;
       if(!layout){
         if(currentConfig.layoutVersionId){if(!/^[-_a-zA-Z0-9]+$/.test(currentConfig.layoutVersionId))throw Error('배치도 버전 ID가 올바르지 않습니다.');versionId=currentConfig.layoutVersionId;layout=(await db.ref(`cafeteriaLayoutEditor/layoutVersions/${versionId}`).once('value')).val();}
@@ -3454,12 +3478,12 @@ async function recognizeFace() {
         layout=C.normalizeLayout(layout);
       }
       if(token!==generation)return;
-      seed={date,layoutVersionId:versionId,layout,config:currentConfig,meta:{date,layoutVersionId:versionId,layout,...cfg}};
-      const r=db.ref(`cafeteriaSeatReservations/days/${date}`);
+      seed={date,layoutVersionId:versionId,layout,config:currentConfig,serviceSettings:pmCfg,mealType:pmMeal,meta:{date,layoutVersionId:versionId,layout,...cfg}};
+      const r=db.ref(`${pmSeatRoot()}/days/${date}`);
       const fn=s=>{if(token!==generation)return;dayState=s.val();ready=true;notifyChanges();render();};
       subscription={ref:r,fn};r.on('value',fn,e=>{if(token!==generation)return;ready=false;message('예약 데이터 연결 실패: '+e.message,true);render();});
       const cr=db.ref('cafeteriaLayoutEditor/reservationConfig');
-      const cf=s=>{if(token!==generation)return;currentConfig=s.val();if(currentConfig?.enabled!==true){message('관리자가 좌석예약을 잠시 닫았습니다.',true);}render();};
+      const cf=s=>{if(token!==generation)return;currentConfig=MealIntegration.reservation(s.val(),pmCfg,pmMeal);if(currentConfig?.enabled!==true){message('관리자가 좌석예약을 잠시 닫았습니다.',true);}render();};
       configSubscription={ref:cr,fn:cf};cr.on('value',cf,e=>{if(token!==generation)return;currentConfig=null;message('예약 설정 조회 실패: '+e.message,true);render();});
       message('시간대를 선택해 그룹을 만들거나, 받은 친구 초대를 수락하세요.');render();
     }catch(e){if(token!==generation)return;ready=false;message(e.message,true);render();}
@@ -3474,11 +3498,11 @@ async function recognizeFace() {
     }else if(previousGroup){toast('그룹이 취소되었거나 참여가 해제되었습니다. 좌석예약을 다시 시작할 수 있습니다.');previousGroup=null;selected=[];}
   }
   async function send(action){
-    if(busy)throw Error('이전 요청을 처리 중입니다.');if(!actor||!ready||!seed)throw Error('학생과 배치도 정보를 먼저 확인하세요.');if(!operating()||currentConfig?.enabled!==true)throw Error('현재 좌석예약을 이용할 수 없습니다.');if(!navigator.onLine)throw Error('인터넷 연결 후 다시 시도하세요.');
+    if(['create','invite','accept','book'].includes(action.type))pmAssert();if(busy)throw Error('이전 요청을 처리 중입니다.');if(!actor||!ready||!seed)throw Error('학생과 배치도 정보를 먼저 확인하세요.');if(!operating()||currentConfig?.enabled!==true)throw Error('현재 좌석예약을 이용할 수 없습니다.');if(!navigator.onLine)throw Error('인터넷 연결 후 다시 시도하세요.');
     const token=generation,requestActor={...actor},requestDate=seed.date,request={...action,actor:requestActor},context={...seed,now:Date.now()};
     busy=true;render();message('요청을 처리하고 있습니다.');
     try{
-      const ref=db.ref(`cafeteriaSeatReservations/days/${requestDate}`);await ref.once('value');
+      const ref=db.ref(`${pmSeatRoot()}/days/${requestDate}`);await ref.once('value');
       if(token!==generation)throw Error('학생이 바뀌어 요청을 취소했습니다.');let rejected='';
       const result=await ref.transaction(current=>{try{const next=C.apply(current,request,{...context,now:Date.now()});rejected='';return next;}catch(e){rejected=e.message;return;}},undefined,false);
       if(!result.committed)throw Error(rejected||'동시에 변경된 내용이 있습니다. 다시 시도하세요.');
