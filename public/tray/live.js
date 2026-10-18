@@ -1,6 +1,40 @@
 'use strict';
+(function(root){
+ 'use strict';
+ // A conditional write protects a seat that changed while this request was in flight.
+ async function release(entry,{base,request=fetch}={}){
+  if(!entry.studentId)return {status:'no-seat'};
+  if(!/^[^.#$\[\]\/\u0000-\u0020\u007f]{1,128}$/.test(entry.studentId)||['__proto__','constructor','prototype'].includes(entry.studentId)||!/^\d{4}-\d{2}-\d{2}$/.test(entry.date))throw Error('좌석 반납 대상 정보가 올바르지 않습니다.');
+  const measuredAt=Date.parse(entry.createdAt);
+  if(!Number.isFinite(measuredAt))throw Error('잔반 측정 시간을 확인할 수 없어 자동 반납하지 않았습니다.');
+  const url=`${base}/cafeteriaSeatReservations/days/${entry.date}/arrivals/${encodeURIComponent(entry.studentId)}.json`;
+  for(let attempt=0;attempt<5;attempt++){
+   const response=await request(url,{cache:'no-store',headers:{'X-Firebase-ETag':'true'},signal:AbortSignal.timeout(12000)});
+   if(!response.ok)throw Error(`좌석 조회 실패 (${response.status})`);
+   const visit=await response.json();
+   if(!visit||visit.status!=='seated')return {status:visit?.status==='released'?'already-released':'no-seat'};
+   if(typeof visit.checkedInAt!=='number'||!Number.isFinite(visit.checkedInAt)||!visit.seatId)throw Error('좌석 입장 기록을 확인할 수 없어 자동 반납하지 않았습니다.');
+   // An offline scan must never release a seat assigned after that scan was taken.
+   if(visit.checkedInAt>measuredAt)return {status:'newer-visit'};
+   const etag=response.headers.get('ETag');
+   if(!etag)throw Error('좌석 상태를 안전하게 확인하지 못했습니다. 다시 시도합니다.');
+   const changed=await request(url,{method:'PUT',headers:{'Content-Type':'application/json','If-Match':etag},body:JSON.stringify({...visit,status:'released',releasedAt:{'.sv':'timestamp'},releaseSource:'waste-scan',wasteScanId:entry.id}),signal:AbortSignal.timeout(12000)});
+   if(changed.status===412)continue;
+   if(!changed.ok)throw Error(changed.status===401||changed.status===403?'좌석 반납 쓰기 권한이 없습니다.':'좌석 반납 실패 ('+changed.status+')');
+   return {status:'released',seatId:visit.seatId};
+  }
+  throw Error('좌석 상태가 변경되어 다음 재시도에서 다시 확인합니다.');
+ }
+ root.TraySeatReturn={release};
+})(globalThis);
+// End automatic seat return core.
+
+'use strict';
 function htmlText(value){return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 const $=id=>document.getElementById(id),C=TrayLiveCore,video=$('video'),overlay=$('overlay'),pen=overlay.getContext('2d'),small=document.createElement('canvas');small.width=C.W;small.height=C.H;const sc=small.getContext('2d',{willReadFrequently:true});const BASE='https://smart-cafeteria-8a2ce-default-rtdb.firebaseio.com';const KEY='tray-live-v1';let s={x:5,y:5,w:90,h:90,split:47,threshold:38},bg=null,empty=null,stream=null,previous=null,running=false,busy=false,cameraRun=0,pending=[],history=[],gate=new C.Gate(),wake=null,lastFrame=-1;
+const seatReturnNotice=document.createElement('p');seatReturnNotice.id='seat-return-status';seatReturnNotice.className='hint';seatReturnNotice.setAttribute('role','status');seatReturnNotice.setAttribute('aria-live','polite');$('total').parentElement.append(seatReturnNotice);
+function seatReturnText(result){return result?.status==='released'||result?.status==='already-released'?'좌석 반납 완료':result?.status==='newer-visit'?'이전 측정 기록 저장 완료 · 현재 좌석은 유지했어요.':'저장 완료 · 반납할 좌석이 없어요.';}
+function showSeatReturn(item,text){if(history[0]?.id===item.id)seatReturnNotice.textContent=text;}
 function tell(text,error=false){$('status').textContent=text;$('status').classList.toggle('error',error);}
 function read(key,fallback){try{return JSON.parse(localStorage.getItem(KEY+key))??fallback;}catch{return fallback;}}
 function persist(key,value){try{localStorage.setItem(KEY+key,JSON.stringify(value));return true;}catch{tell('기기 저장 공간을 사용할 수 없습니다. 자동 인식을 중지했어요.',true);$('armed').checked=false;return false;}}
@@ -16,12 +50,37 @@ $('background').onclick=()=>{try{bg=new Uint8ClampedArray(frame());empty=null;pe
 $('empty').onclick=()=>{try{const candidate=new Uint8ClampedArray(frame()),e=C.evidence(candidate,bg,candidate,s,null);if(!e.present)throw Error('배경과 식판이 잘 구분되지 않아요. 무늬 없는 어두운 배경 위에 식판을 가이드에 맞춰 주세요.');empty=candidate;$('armed').checked=false;persist('cal',{s,bg:Array.from(bg),empty:Array.from(empty)});gate.reset();update();tell('기준 등록 완료. 빈 식판을 치우고 자동 인식·저장을 시작하세요.');}catch(e){tell(e.message,true);}};
 $('armed').onchange=()=>{gate.stableSince=null;if(window.StudentQR?.canAnalyze())gate.prepareStudent();previous=null;tell($('armed').checked?'식판을 완전히 치워 주세요. 비어 있는 화면부터 확인합니다.':'자동 인식을 멈췄습니다. 카메라는 계속 켜져 있어요.');};
 function koreanDate(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
-function record(data){const student=window.StudentQR?.takeSnapshot();if(!student){tell('학년·반·번호로 학생을 먼저 확인해 주세요.',true);return;}const id=crypto.randomUUID(),date=koreanDate();const entry={id,date,studentId:student.uid,studentName:student.name,identityMethod:'grade-class-number',createdAt:new Date().toISOString(),schemaVersion:1,method:'empty-tray-pixel-area-v1',beforeAssumedPercent:100,measurement:'area_occupancy_not_weight',totalRemainingAreaPercent:data.total,parts:Object.fromEntries(data.parts.map(p=>[p.key,{name:p.name,shape:p.shape,beforeAssumedPercent:100,remainingAreaPercent:p.remainingAreaPercent}])),settings:{...s},status:'pending'};if(pending.length>=200){$('armed').checked=false;tell('미저장 기록이 200개입니다. 저장 재시도 후 다시 시작해 주세요.',true);return;}const next=[...pending,entry];if(!persist('pending',next))return;pending=next;persist('awaitClear',true);history=[entry,...history].slice(0,30);persist('history',history);render(data);window.StudentQR.consume(student.uid);flush();}
-function render(data){if(data){$('total').textContent=data.total+'%';$('map').innerHTML=data.parts.map(p=>`<div>${htmlText(p.name)}<b>${p.remainingAreaPercent}%</b></div>`).join('');}$('queue-status').textContent=pending.length?`기기에 보관 중인 미저장 기록 ${pending.length}개`:'미저장 기록 없음';$('history').replaceChildren();for(const h of history){const row=document.createElement('div');row.className='history-row';const left=document.createElement('div');left.textContent=new Date(h.createdAt).toLocaleTimeString('ko-KR',{timeZone:'Asia/Seoul'});const note=document.createElement('small');note.textContent=pending.some(p=>p.id===h.id)?'기기 보관 · Firebase 미저장':'Firebase 저장 완료';left.append(note);const right=document.createElement('strong');right.textContent=h.totalRemainingAreaPercent+'%';row.append(left,right);$('history').append(row);}}
-async function flush(){if(busy||!pending.length)return;busy=true;$('retry').disabled=true;try{while(pending.length){const item=pending[0],{status:ignored,...payload}=item;const response=await fetch(`${BASE}/${StudentQRCore.path(item)}.json`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,savedAt:{'.sv':'timestamp'}}),signal:AbortSignal.timeout(12000)});if(!response.ok)throw Error(response.status===401||response.status===403?'Firebase 쓰기 권한이 없습니다. 해당 경로의 보안 규칙을 확인해 주세요.':`Firebase 저장 실패 (${response.status})`);const next=pending.filter(p=>p.id!==item.id);if(!persist('pending',next))throw Error('기기 저장 상태 갱신 실패. 동일 ID로 재시도합니다.');pending=next;history=history.map(h=>h.id===item.id?{...h,status:'saved'}:h);persist('history',history);$('connection').textContent='Firebase · 저장 완료';$('connection').classList.remove('error');render();}}catch(e){$('connection').textContent='Firebase · 미저장';$('connection').classList.add('error');$('queue-status').textContent=`미저장 ${pending.length}개 · ${e.message} 기기에 보관했으며 30초마다 재시도합니다.`;}finally{busy=false;$('retry').disabled=false;}}
+function record(data){const student=window.StudentQR?.takeSnapshot();if(!student){tell('학년·반·번호로 학생을 먼저 확인해 주세요.',true);return;}const id=crypto.randomUUID(),date=koreanDate();const entry={id,date,studentId:student.uid,studentName:student.name,identityMethod:'grade-class-number',createdAt:new Date().toISOString(),schemaVersion:1,method:'empty-tray-pixel-area-v1',beforeAssumedPercent:100,measurement:'area_occupancy_not_weight',totalRemainingAreaPercent:data.total,parts:Object.fromEntries(data.parts.map(p=>[p.key,{name:p.name,shape:p.shape,beforeAssumedPercent:100,remainingAreaPercent:p.remainingAreaPercent}])),settings:{...s},status:'pending'};if(pending.length>=200){$('armed').checked=false;tell('미저장 기록이 200개입니다. 저장 재시도 후 다시 시작해 주세요.',true);return;}const next=[...pending,entry];if(!persist('pending',next))return;pending=next;persist('awaitClear',true);history=[entry,...history].slice(0,30);persist('history',history);render(data);showSeatReturn(entry,'잔반 저장 중 · 좌석 반납 대기');window.StudentQR.consume(student.uid);flush();}
+function render(data){if(data){$('total').textContent=data.total+'%';$('map').innerHTML=data.parts.map(p=>`<div>${htmlText(p.name)}<b>${p.remainingAreaPercent}%</b></div>`).join('');}$('queue-status').textContent=pending.length?`기기에 보관 중인 미저장 기록 ${pending.length}개`:'미저장 기록 없음';$('history').replaceChildren();for(const h of history){const row=document.createElement('div');row.className='history-row';const left=document.createElement('div');left.textContent=new Date(h.createdAt).toLocaleTimeString('ko-KR',{timeZone:'Asia/Seoul'});const note=document.createElement('small');note.textContent=pending.some(p=>p.id===h.id)?(pending.find(p=>p.id===h.id).wasteSaved?'잔반 저장 완료 · 좌석 반납 대기':'기기 보관 · Firebase 미저장'):(h.seatReturn?seatReturnText(h.seatReturn):'Firebase 저장 완료');left.append(note);const right=document.createElement('strong');right.textContent=h.totalRemainingAreaPercent+'%';row.append(left,right);$('history').append(row);}}
+async function flush(){
+ if(busy||!pending.length)return;busy=true;$('retry').disabled=true;
+ const failures=[];
+ try{for(const item of pending.slice()){
+  try{
+  if(!item.wasteSaved){
+   const {status:ignored,wasteSaved:localOnly,seatReturn:localReturn,...payload}=item;
+   const response=await fetch(`${BASE}/${StudentQRCore.path(item)}.json`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,savedAt:{'.sv':'timestamp'}}),signal:AbortSignal.timeout(12000)});
+   if(!response.ok)throw Error(response.status===401||response.status===403?'Firebase 쓰기 권한이 없습니다. 해당 경로의 보안 규칙을 확인해 주세요.':`Firebase 저장 실패 (${response.status})`);
+   item.wasteSaved=true;
+   if(!persist('pending',pending))throw Error('잔반은 저장되었으나 기기 상태 기록에 실패했습니다. 같은 ID로 다시 확인합니다.');
+  }
+  showSeatReturn(item,'잔반 저장 완료 · 좌석 반납 중…');
+  const result=await TraySeatReturn.release(item,{base:BASE});
+  const next=pending.filter(p=>p.id!==item.id);
+  if(!persist('pending',next))throw Error('기기 저장 상태 갱신 실패. 동일 ID로 재시도합니다.');
+  pending=next;history=history.map(h=>h.id===item.id?{...h,status:'saved',seatReturn:result}:h);persist('history',history);
+  showSeatReturn(item,seatReturnText(result));$('connection').textContent='Firebase · 저장 완료';$('connection').classList.remove('error');render();
+  }catch(e){failures.push(e);showSeatReturn(item,item.wasteSaved?'잔반 저장 완료 · 좌석 반납을 재시도하고 있어요.':'잔반 미저장 · 저장 후 좌석을 반납합니다.');}
+ }
+ if(failures.length){
+  const saved=pending.some(item=>item.wasteSaved),e=failures[0];
+  $('connection').textContent=saved?'Firebase · 좌석 반납 대기':'Firebase · 미저장';$('connection').classList.add('error');
+  $('queue-status').textContent=(saved?'잔반 저장 완료 · 좌석 반납 대기':'미저장 '+pending.length+'개')+' · '+e.message+' 기기에 보관했으며 30초마다 재시도합니다.';
+ }
+ }finally{busy=false;$('retry').disabled=false;}
+}
 $('retry').onclick=flush;window.addEventListener('online',flush);setInterval(flush,30000);
 setInterval(()=>{if(!running||!bg||!empty||document.hidden||currentTab!=='live'||calibrationBusy)return;try{if(video.currentTime===lastFrame){gate.stableSince=null;return;}lastFrame=video.currentTime;const f=frame(),e=C.evidence(f,bg,empty,s,previous);previous=new Uint8ClampedArray(f);const ready=$('armed').checked&&window.StudentQR?.canAnalyze();
 if(!ready){if(gate.waitClear)gate.step({...e,present:false,stable:false},performance.now());if(!gate.waitClear&&read('awaitClear',false))persist('awaitClear',false);gate.stableSince=null;$('progress').style.width='0%';if(!window.StudentQR?.canAnalyze())tell('학년·반·번호를 입력하고 학생 확인을 눌러 주세요.');else tell('자동 인식을 켜 주세요.');return;}
 const triggered=gate.step(e,performance.now());if(!gate.waitClear&&read('awaitClear',false))persist('awaitClear',false);if(triggered){record(C.measure(f,empty,s));if($('armed').checked)tell('완료! 식판을 치우고 다음 학생 번호를 입력하세요.');}else if(gate.waitClear)tell('이전 식판을 완전히 치워 주세요.');else if(!e.present)tell(e.structure<=60?'설정에서 배경과 빈 식판을 다시 등록해 주세요.':'식판을 가이드에 맞춰 주세요.');else if(!e.stable)tell('식판 감지 · 잠시 멈춰 주세요.');else tell('식판 감지 · 분석 중…');$('progress').style.width=(gate.stableSince===null?0:Math.min(100,(performance.now()-gate.stableSince)/15))+'%';}catch(e){$('armed').checked=false;tell('인식을 멈췄어요. '+e.message,true);}},200);
 settings();update();draw();render();flush();
-
