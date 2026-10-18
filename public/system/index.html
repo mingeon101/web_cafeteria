@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>스마트 급식 관리자 대시보드</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --primary: #FF6B35;
+      --accent: #1A1A2E;
+      --bg: #F0EDE8;
+      --card: #FFFFFF;
+      --muted: #8B7355;
+      --success: #2E7D32;
+      --danger: #C62828;
+      --danger-bg: #FFEBEE;
+    }
+
+    body { background: var(--bg); font-family: 'Noto Sans KR', sans-serif; color: var(--accent); overflow-x: hidden; }
+    #app { max-width: 1100px; margin: 0 auto; padding-bottom: 50px; }
+
+    /* HEADER */
+    .header {
+      background: var(--accent); color: white; padding: 15px 30px;
+      display: flex; justify-content: space-between; align-items: center;
+      position: sticky; top: 0; z-index: 100; box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+    .header-title { font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700; letter-spacing: 1px; }
+    .header-time { font-family: 'Space Grotesk', sans-serif; opacity: 0.6; font-size: 14px; }
+    .header-right { display: flex; align-items: center; gap: 14px; }
+    .connection-badge {
+      display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;
+      color: rgba(255,255,255,0.75); font-family: 'Space Grotesk', sans-serif;
+    }
+    .connection-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--success); flex-shrink: 0;
+      box-shadow: 0 0 0 3px rgba(46,125,50,0.2); transition: all 0.3s ease;
+    }
+    .connection-badge.offline .connection-dot {
+      background: var(--danger); box-shadow: 0 0 0 3px rgba(198,40,40,0.25);
+      animation: statusPulse 1.5s infinite;
+    }
+    .connection-badge.offline { color: #FF8A80; }
+
+    .content { padding: 25px; display: flex; flex-direction: column; gap: 30px; }
+    .section-title { font-size: 12px; font-weight: 900; letter-spacing: 1.5px; color: var(--muted); text-transform: uppercase; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+    .section-title-left { display: flex; align-items: center; gap: 8px; }
+
+    /* SYSTEM STATUS / STOP CONTROL */
+    .system-status-card {
+      background: var(--card); border-radius: 24px; padding: 22px 28px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.04); display: flex; align-items: center;
+      justify-content: space-between; gap: 16px; border: 2px solid transparent;
+      transition: all 0.3s ease; flex-wrap: wrap;
+    }
+    .system-status-card.stopped { background: var(--danger-bg); border-color: var(--danger); }
+    .system-status-left { display: flex; align-items: center; gap: 16px; }
+    .status-dot {
+      width: 14px; height: 14px; border-radius: 50%; background: var(--success);
+      flex-shrink: 0; box-shadow: 0 0 0 5px rgba(46,125,50,0.15); transition: all 0.3s ease;
+    }
+    .system-status-card.stopped .status-dot {
+      background: var(--danger); box-shadow: 0 0 0 5px rgba(198,40,40,0.15);
+      animation: statusPulse 1.5s infinite;
+    }
+    @keyframes statusPulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+    .system-status-title { font-size: 17px; font-weight: 900; }
+    .system-status-sub { font-size: 13px; color: var(--muted); margin-top: 3px; }
+
+    .system-toggle-btn {
+      border: none; padding: 13px 24px; border-radius: 14px; font-weight: 900;
+      font-size: 13px; cursor: pointer; font-family: 'Noto Sans KR', sans-serif;
+      display: flex; align-items: center; gap: 6px; transition: transform 0.15s ease, box-shadow 0.15s ease;
+      background: var(--danger); color: white; box-shadow: 0 4px 14px rgba(198,40,40,0.3);
+      white-space: nowrap;
+    }
+    .system-toggle-btn.resume { background: var(--success); box-shadow: 0 4px 14px rgba(46,125,50,0.3); }
+    .system-toggle-btn:hover { transform: translateY(-2px); }
+    .system-toggle-btn:active { transform: translateY(0); }
+    .system-toggle-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+    /* MENU SET BUTTON */
+    .menu-edit-btn {
+      background: var(--primary); color: white; border: none; padding: 8px 16px;
+      border-radius: 12px; font-size: 12px; font-weight: 900; letter-spacing: 0.5px;
+      cursor: pointer; font-family: 'Noto Sans KR', sans-serif; text-transform: none;
+      display: flex; align-items: center; gap: 6px; transition: transform 0.15s ease, box-shadow 0.15s ease;
+      box-shadow: 0 4px 12px rgba(255,107,53,0.3);
+    }
+    .menu-edit-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(255,107,53,0.4); }
+    .menu-edit-btn:active { transform: translateY(0); }
+    .menu-edit-btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; transform: none; }
+
+    /* TODAY'S MENU CARD */
+    .menu-today-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    @media (max-width: 850px) { .menu-today-grid { grid-template-columns: 1fr; } }
+    .menu-today-item {
+      display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 16px;
+      background: #FAF8F5; border: 1px solid #EEE7DE;
+    }
+    .menu-today-icon { font-size: 26px; width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); flex-shrink: 0; }
+    .menu-today-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .menu-today-robot { font-size: 11px; color: var(--muted); font-weight: 700; font-family: 'Space Grotesk'; }
+    .menu-today-name { font-size: 16px; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* KPI CARDS */
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
+    .kpi-card { background: var(--card); padding: 25px; border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.04); border-bottom: 5px solid var(--primary); }
+    .kpi-label { font-size: 13px; color: var(--muted); font-weight: 700; margin-bottom: 10px; }
+    .kpi-value { font-family: 'Space Grotesk', sans-serif; font-size: 40px; font-weight: 700; line-height: 1; }
+    .kpi-unit { font-size: 18px; font-weight: 400; margin-left: 5px; color: var(--muted); }
+
+    /* ROBOT STATUS */
+    .robot-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    @media (max-width: 850px) { .robot-grid { grid-template-columns: 1fr; } }
+    
+    .robot-card { background: var(--card); padding: 24px; border-radius: 24px; position: relative; border: 2px solid transparent; transition: all 0.3s ease; box-shadow: 0 10px 30px rgba(0,0,0,0.04); }
+    .robot-card.has-error { border-color: var(--danger); background: var(--danger-bg); animation: shake 0.5s ease-in-out; }
+    .robot-card.system-stopped {
+      filter: grayscale(0.65); opacity: 0.88;
+      border-color: var(--muted) !important; background: #F1EEEA !important;
+      animation: none !important;
+    }
+    
+    @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+
+    .robot-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+    .robot-name { font-size: 18px; font-weight: 700; }
+    .robot-id { font-size: 11px; color: var(--muted); font-family: 'Space Grotesk'; }
+
+    .menu-badge {
+      font-size: 12px; background: var(--primary); color: white; padding: 3px 8px;
+      border-radius: 10px; margin-left: 8px; vertical-align: middle; display: inline-block;
+      max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+
+    .error-badge { 
+      background: var(--danger); color: white; padding: 5px 12px; border-radius: 12px;
+      font-size: 12px; font-weight: 900; display: none; align-items: center; gap: 5px;
+      animation: pulse 1.5s infinite;
+    }
+    .robot-card.has-error .error-badge { display: flex; }
+    .robot-card.system-stopped .error-badge { display: flex; background: var(--muted); animation: none; }
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+    .robot-stat { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(0,0,0,0.05); font-size: 14px; }
+    .robot-stat:last-child { border: none; }
+    .robot-stat .val { font-weight: 700; font-family: 'Space Grotesk'; }
+
+    /* FOOD & CAPACITY SECTION */
+    .bottom-layout { display: grid; grid-template-columns: 1.5fr 1fr; gap: 25px; }
+    @media (max-width: 850px) { .bottom-layout { grid-template-columns: 1fr; } }
+
+    .card { background: var(--card); padding: 30px; border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.04); }
+    
+    .food-item { display: flex; align-items: center; gap: 20px; margin-bottom: 18px; }
+    .food-name { width: 84px; flex-shrink: 0; font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .progress-bg { flex: 1; height: 12px; background: #E9E4DE; border-radius: 10px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 10px; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); }
+    .food-val { width: 50px; text-align: right; font-size: 14px; font-weight: 700; font-family: 'Space Grotesk'; }
+
+    .cap-box { display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; padding: 20px 0; }
+    .cap-ring-svg { transform: rotate(-90deg); }
+    .cap-text { position: absolute; text-align: center; }
+    .cap-num { font-family: 'Space Grotesk', sans-serif; font-size: 42px; font-weight: 700; color: var(--primary); line-height: 1; }
+    .cap-label { font-size: 12px; font-weight: 700; color: var(--muted); margin-top: 5px; }
+
+    /* MODAL (메뉴 설정 / 작동 중지 공용) */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(26,26,46,0.55);
+      z-index: 300; align-items: center; justify-content: center; padding: 20px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-card {
+      background: var(--card); border-radius: 24px; padding: 30px; width: 100%; max-width: 420px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.25); animation: modalIn 0.2s ease;
+    }
+    @keyframes modalIn { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    .modal-title { font-size: 18px; font-weight: 900; margin-bottom: 6px; }
+    .modal-sub { font-size: 13px; color: var(--muted); margin-bottom: 22px; line-height: 1.6; }
+    .modal-field { margin-bottom: 16px; }
+    .modal-field label {
+      display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700;
+      color: var(--accent); margin-bottom: 8px;
+    }
+    .modal-field input {
+      width: 100%; padding: 12px 14px; border-radius: 12px; border: 2px solid #EEE7DE;
+      font-family: 'Noto Sans KR', sans-serif; font-size: 14px; outline: none;
+      transition: border-color 0.15s ease;
+    }
+    .modal-field input:focus { border-color: var(--primary); }
+
+    .allergy-input-row { display:flex; align-items:center; gap:8px; margin-top:8px; }
+    .allergy-edit-btn {
+      border:1px solid #EEE7DE; background:#FAF8F5; color:var(--accent);
+      padding:8px 11px; border-radius:10px; font-size:12px; font-weight:800;
+      cursor:pointer; font-family:'Noto Sans KR',sans-serif; white-space:nowrap;
+      transition:all .15s ease;
+    }
+    .allergy-edit-btn:hover { border-color:var(--primary); color:var(--primary); transform:translateY(-1px); }
+    .allergy-summary { min-width:0; flex:1; color:var(--muted); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .allergy-summary.has-value { color:var(--danger); font-weight:700; }
+    .allergy-modal-card { max-width:440px; }
+    .allergy-help {
+      background:#FFF7F2; border:1px solid #FFE0D2; color:#8B5A43;
+      border-radius:12px; padding:11px 13px; font-size:12px; line-height:1.6; margin-bottom:16px;
+    }
+    .allergy-modal-input {
+      width:100%; min-height:90px; resize:vertical; padding:12px 14px; border-radius:12px;
+      border:2px solid #EEE7DE; font-family:'Noto Sans KR',sans-serif; font-size:14px; outline:none;
+    }
+    .allergy-modal-input:focus { border-color:var(--primary); }
+
+    .modal-field select {
+      width: 100%; padding: 12px 14px; border-radius: 12px; border: 2px solid #EEE7DE;
+      font-family: 'Noto Sans KR', sans-serif; font-size: 14px; outline: none;
+      background: white; color: var(--accent); cursor: pointer;
+      transition: border-color 0.15s ease; appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%238B7355'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.148l3.71-3.918a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z' clip-rule='evenodd'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 14px center; background-size: 16px;
+    }
+    .modal-field select:focus { border-color: var(--primary); }
+    .modal-actions { display: flex; gap: 10px; margin-top: 24px; }
+    .modal-actions button {
+      flex: 1; padding: 13px; border-radius: 12px; border: none; font-weight: 900;
+      font-size: 14px; cursor: pointer; font-family: 'Noto Sans KR', sans-serif;
+    }
+    .modal-actions button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-secondary { background: #F0EDE8; color: var(--accent); }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: #E85A24; }
+    .btn-danger-solid { background: var(--danger); color: white; }
+    .btn-danger-solid:hover { background: #A81F1F; }
+    .modal-saved-toast {
+      position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px);
+      background: var(--accent); color: white; padding: 12px 22px; border-radius: 14px;
+      font-size: 13px; font-weight: 700; z-index: 400; opacity: 0; pointer-events: none;
+      transition: all 0.25s ease;
+    }
+    .modal-saved-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .seat-card{padding:26px!important;min-width:0}.seat-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:22px}.seat-card h2{font-size:20px;letter-spacing:-.6px}.seat-card-head p{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.7}.seat-live{font-size:11px;white-space:nowrap;border-radius:20px;padding:7px 12px;background:#eaf6ef;color:#207047;font-weight:700}.seat-live.stale{background:#fff1dd;color:#945c14}.seat-counts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.seat-counts>div{background:#f5f3f0;border:1px solid #eee9e2;border-radius:16px;padding:17px}.seat-counts span{display:block;font-size:12px;color:#756e64;margin-bottom:7px}.seat-counts strong{font-family:'Space Grotesk',sans-serif;font-size:32px;line-height:1.2}.seat-counts small{font-size:12px;margin-left:5px}.seat-counts .seat-used-count{background:#fff1f0;border-color:#f8d9d5;color:#b83232}.seat-counts .seat-reserved-count{background:#fff8e7;border-color:#f4e4b9;color:#956415}.seat-counts .seat-free-count{background:#edf7f1;border-color:#d0e7da;color:#207047}.seat-summary{font-size:14px;font-weight:700;margin:20px 0 16px;line-height:1.7}.seat-legend{display:flex;flex-wrap:wrap;gap:20px;font-size:12px;color:#675e53;margin-bottom:14px}.seat-legend span{display:flex;align-items:center;gap:7px}.seat-dot{width:11px;height:11px;border:1.5px solid;border-radius:4px}.seat-dot.free{background:#daf0e3;border-color:#31875b}.seat-dot.used{background:#ffd9d5;border-color:#c74545}.seat-dot.reserved{background:#ffedbd;border-color:#bc8421}.seat-map-frame{background:#faf9f6;border:1px solid #e9e4db;border-radius:18px;overflow:auto;max-height:650px;overscroll-behavior:contain}.seat-map-frame svg{display:block;width:100%;height:auto}.seat-map-frame:focus-visible{outline:3px solid #ff6b35;outline-offset:3px}.seat-map-frame .seat-chair:focus{outline:none}.seat-map-frame .seat-chair:focus circle{stroke:#1a1a2e;stroke-width:3}.seat-empty{padding:60px 18px;color:var(--muted);text-align:center;font-size:14px;line-height:1.8}.seat-footnote{margin-top:14px;font-size:11px;line-height:1.7;color:var(--muted)}
+    @media(max-width:650px){.header{padding:14px 16px;flex-wrap:wrap;gap:10px}.header-title{font-size:15px}.header-right{flex-wrap:wrap;gap:10px}.content{padding:16px;gap:24px}.robot-grid,.menu-today-grid{grid-template-columns:1fr}.seat-card{padding:18px!important}.seat-counts{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.seat-counts>div{padding:14px}.seat-card h2{font-size:18px}.seat-card-head{gap:10px}.seat-legend{gap:14px}.seat-counts strong{font-size:30px}.seat-summary{font-size:13px}.section-title{letter-spacing:0;flex-wrap:wrap;gap:8px}}
+
+  </style>
+</head>
+<body>
+
+<div id="app">
+  <div class="header">
+    <div class="header-title">SMART CAFETERIA ADMIN</div>
+    <div class="header-right">
+      <div class="connection-badge" id="connection-badge">
+        <span class="connection-dot"></span>
+        <span id="connection-text">연결됨</span>
+      </div>
+      <div class="header-time" id="clock">00:00:00</div>
+      <a href="https://test-cafeteria.netlify.app/admin/" role="button" style="color: white;">리뷰관리페이지</a>
+    </div>
+  </div>
+
+  <div class="content">
+    <section>
+      <div class="system-status-card" id="system-status-card">
+        <div class="system-status-left">
+          <div class="status-dot" id="status-dot"></div>
+          <div>
+            <div class="system-status-title" id="system-status-title">시스템 정상 작동 중</div>
+            <div class="system-status-sub" id="system-status-sub">모든 로봇이 정상적으로 배식을 진행하고 있습니다</div>
+          </div>
+        </div>
+        <button class="system-toggle-btn" id="btn-system-toggle">🛑 작동 중지</button>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <div class="section-title-left"><span>📋</span> 오늘의 메뉴</div>
+        <button class="menu-edit-btn" id="btn-open-menu-modal">✏️ 메뉴 설정</button>
+      </div>
+      <div class="card">
+        <div class="menu-today-grid" id="menu-today-container"></div>
+      </div>
+    </section>
+
+<section>
+      <div class="section-title"><span>🤖</span> 로봇 실시간 모니터링</div>
+      <div class="robot-grid" id="robot-container">
+        </div>
+    </section>
+
+    <section id="seat-overview" aria-labelledby="seat-title">
+      <div class="section-title"><div class="section-title-left"><span>▦</span> <span id="seat-title">급식실 좌석 현황</span></div><span id="seat-date"></span></div>
+      <div class="card seat-card">
+        <div class="seat-card-head"><div><h2 id="seat-plan-name">급식실 배치도</h2><p id="seat-slot">좌석 정보를 불러오는 중입니다.</p></div><span class="seat-live" id="seat-live">연결 확인 중</span></div>
+        <div class="seat-counts" aria-live="polite" aria-atomic="true">
+          <div><span>전체 좌석</span><strong id="seat-total">—</strong><small>석</small></div>
+          <div class="seat-used-count"><span>사용 중</span><strong id="seat-used">—</strong><small>석</small></div>
+          <div class="seat-reserved-count"><span>예약 대기</span><strong id="seat-reserved">—</strong><small>석</small></div>
+          <div class="seat-free-count"><span>배식 가능</span><strong id="seat-available">—</strong><small>석</small></div>
+        </div>
+        <p id="seat-summary" class="seat-summary" role="status" aria-live="polite">저장된 배치도를 확인하고 있습니다.</p>
+        <div class="seat-legend"><span><i class="seat-dot free"></i>빈 좌석</span><span><i class="seat-dot used"></i>사용 중</span><span><i class="seat-dot reserved"></i>예약 대기</span></div>
+        <div class="seat-map-frame" id="seat-map-frame" tabindex="0" aria-label="급식실 좌석 배치도, 화면이 작으면 가로로 스크롤할 수 있습니다."><div id="seat-map"><p class="seat-empty">배치도를 불러오는 중입니다.</p></div></div>
+        <p class="seat-footnote" id="seat-update">좌석 입장·반납 기록을 실시간으로 표시합니다.</p>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- 메뉴 설정 모달 -->
+<div class="modal-overlay" id="menu-modal-overlay">
+  <div class="modal-card">
+    <div class="modal-title">오늘의 메뉴 설정</div>
+    <div class="modal-sub">로봇 A・B・C가 배식할 품목을 입력하세요.</div>
+
+    <div class="modal-field">
+      <label>🍚 로봇 A — 밥</label>
+      <input type="text" id="menu-input-밥" placeholder="예: 잡곡밥" maxlength="20" />
+      <div class="allergy-input-row">
+        <button type="button" class="allergy-edit-btn" data-allergy-category="밥">⚠️ 알레르기 사항 입력</button>
+        <span class="allergy-summary" id="allergy-summary-밥">입력된 알레르기 사항 없음</span>
+      </div>
+    </div>
+    <div class="modal-field">
+      <label>🍲 로봇 B — 국</label>
+      <input type="text" id="menu-input-국" placeholder="예: 된장국" maxlength="20" />
+      <div class="allergy-input-row">
+        <button type="button" class="allergy-edit-btn" data-allergy-category="국">⚠️ 알레르기 사항 입력</button>
+        <span class="allergy-summary" id="allergy-summary-국">입력된 알레르기 사항 없음</span>
+      </div>
+    </div>
+    <div class="modal-field">
+      <label>🥬 로봇 C — 김치</label>
+      <input type="text" id="menu-input-김치" placeholder="예: 배추김치" maxlength="20" />
+      <div class="allergy-input-row">
+        <button type="button" class="allergy-edit-btn" data-allergy-category="김치">⚠️ 알레르기 사항 입력</button>
+        <span class="allergy-summary" id="allergy-summary-김치">입력된 알레르기 사항 없음</span>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" id="menu-modal-cancel">취소</button>
+      <button class="btn-primary" id="menu-modal-save">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 알레르기 사항 입력 모달 -->
+<div class="modal-overlay" id="allergy-modal-overlay">
+  <div class="modal-card allergy-modal-card">
+    <div class="modal-title">⚠️ 알레르기 사항 입력</div>
+    <div class="modal-sub" id="allergy-modal-sub">메뉴의 알레르기 유발 식품 정보를 직접 입력하세요.</div>
+    <div class="allergy-help">
+      예: <strong>1, 5, 6</strong> 또는 <strong>우유, 대두, 밀</strong><br>
+      여러 항목은 쉼표(,)로 구분해서 입력할 수 있습니다.
+    </div>
+    <div class="modal-field">
+      <label>알레르기 사항</label>
+      <textarea class="allergy-modal-input" id="allergy-modal-input" placeholder="예: 1, 5, 6&#10;또는 우유, 대두, 밀"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="allergy-modal-cancel">취소</button>
+      <button class="btn-primary" id="allergy-modal-save">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 작동 중지 확인 모달 -->
+<div class="modal-overlay" id="stop-modal-overlay">
+  <div class="modal-card">
+    <div class="modal-title">⚠️ 시스템 작동을 중지할까요?</div>
+    <div class="modal-sub">로봇 A・B・C의 배식이 즉시 중단되고, 학생들은 배식을 받을 수 없게 됩니다. 재개 전까지 메뉴 설정도 변경할 수 없습니다.</div>
+
+    <div class="modal-field">
+      <label>🛑 중지 사유</label>
+      <select id="stop-reason-select">
+        <option value="로봇 점검/정비 중">🔧 로봇 점검/정비 중</option>
+        <option value="재료 소진">🍚 재료 소진</option>
+        <option value="정전 · 네트워크 문제">⚡ 정전 · 네트워크 문제</option>
+        <option value="청소 · 소독 중">🧹 청소 · 소독 중</option>
+        <option value="__other__">✏️ 기타 (직접 입력)</option>
+      </select>
+    </div>
+    <div class="modal-field" id="stop-reason-other-wrap" style="display:none;">
+      <label>사유 직접 입력</label>
+      <input type="text" id="stop-reason-other" placeholder="예: 배식 인원 조정 중" maxlength="40" />
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" id="stop-modal-cancel">취소</button>
+      <button class="btn-danger-solid" id="stop-modal-confirm">중지하기</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-saved-toast" id="menu-saved-toast">✅ 메뉴가 저장되었습니다</div>
+<div class="modal-saved-toast" id="system-saved-toast">🛑 시스템이 중지되었습니다</div>
+
+<script>
+/* ══════════════════════════════════════
+   FIREBASE 설정 및 초기화
+══════════════════════════════════════ */
+const firebaseConfig = {
+  apiKey: "AIzaSyC3SvV8-bTyQClyZlGWybhR3z5YvLGXYL0",
+  authDomain: "smart-cafeteria-8a2ce.firebaseapp.com",
+  databaseURL: "https://smart-cafeteria-8a2ce-default-rtdb.firebaseio.com",
+  projectId: "smart-cafeteria-8a2ce",
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+const FOOD_NAMES = ["밥", "국", "김치"]; // 내부 데이터 키 (고정)
+const ROBOT_TO_CATEGORY = { "robot-A": "밥", "robot-B": "국", "robot-C": "김치" };
+const CATEGORY_ICON = { "밥": "🍚", "국": "🍲", "김치": "🥬" };
+
+// 오늘의 메뉴 표시 이름 (기본값 = 카테고리명 그대로)
+let menuLabels = { "밥": "밥", "국": "국", "김치": "김치" };
+let menuAllergies = { "밥": "", "국": "", "김치": "" };
+
+// 최신 데이터 캐시 (메뉴/시스템 상태가 바뀌어도 즉시 다시 그릴 수 있도록 보관)
+let lastRobots = null;
+
+// 시스템 작동 상태 (기본값 = 정상 작동, DB에 값이 없을 때도 안전하게 동작)
+let systemOperating = true;
+let lastSystemUpdatedAt = null; // 마지막으로 상태가 바뀐 시각 (중지/재개 시각 표시용)
+let lastSystemReason = null;    // 중지 사유 (관리자가 선택/입력한 값)
+
+/* ══════════════════════════════════════
+   유틸 — innerHTML에 꽂히는 값은 항상 이스케이프해서 XSS를 방지
+══════════════════════════════════════ */
+function esc(str) {
+  return String(str).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+/* ══════════════════════════════════════
+   렌더링 함수
+══════════════════════════════════════ */
+
+function renderMenuToday() {
+  const container = document.getElementById('menu-today-container');
+  container.innerHTML = FOOD_NAMES.map(cat => `
+    <div class="menu-today-item">
+      <div class="menu-today-icon">${CATEGORY_ICON[cat]}</div>
+      <div class="menu-today-info">
+        <div class="menu-today-robot">${cat === '밥' ? '로봇 A' : cat === '국' ? '로봇 B' : '로봇 C'}</div>
+        <div class="menu-today-name">${esc(menuLabels[cat])}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderRobots() {
+  const robots = lastRobots;
+  const container = document.getElementById('robot-container');
+  const ROBOT_KEYS = ["robot-A", "robot-B", "robot-C"];
+
+  container.innerHTML = ROBOT_KEYS.map(id => {
+    const r = (robots && robots[id]) || { name: `배식 로봇 ${id.slice(-1)}`, state: 'idle', battery: 0 };
+    const battery = r.battery || 0;
+    const isError = r.state === 'error';
+    const needCharge = battery < 30;
+    const criticalBattery = battery < 15;
+    const category = ROBOT_TO_CATEGORY[id];
+    const dishName = menuLabels[category];
+
+    const cardClasses = [
+      'robot-card',
+      (isError || needCharge) ? 'has-error' : '',
+      !systemOperating ? 'system-stopped' : ''
+    ].filter(Boolean).join(' ');
+
+    let badgeText;
+    if (!systemOperating) badgeText = '⏸ 정지됨';
+    else if (isError) badgeText = '⚠️ ERROR';
+    else badgeText = '🔋 충전 필요';
+
+    let statusText, statusColor;
+    if (!systemOperating) { statusText = '정지됨'; statusColor = 'var(--muted)'; }
+    else if (isError) { statusText = '점검 필요'; statusColor = 'var(--danger)'; }
+    else if (needCharge) { statusText = '충전 필요'; statusColor = '#FF9800'; }
+    else { statusText = '정상 작동'; statusColor = 'var(--success)'; }
+
+    return `
+      <div class="${cardClasses}">
+        <div class="robot-header">
+          <div class="robot-info">
+  <div class="robot-name">
+    ${esc(r.name)}
+    <span class="menu-badge" title="${esc(dishName)}">
+      ${CATEGORY_ICON[category]} ${esc(dishName)}
+    </span>
+  </div>
+  <div class="robot-id">${esc(id)}</div>
+</div>
+          <div class="error-badge">
+            ${badgeText}
+          </div>
+        </div>
+
+        <div class="robot-stat">
+          <span>시스템 상태</span>
+          <span class="val" style="color:${statusColor}">
+            ${statusText}
+          </span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderSystemStatus() {
+  const card  = document.getElementById('system-status-card');
+  const title = document.getElementById('system-status-title');
+  const sub   = document.getElementById('system-status-sub');
+  const btn   = document.getElementById('btn-system-toggle');
+  const menuBtn = document.getElementById('btn-open-menu-modal');
+
+  // 버튼 연타로 중복 요청이 쌓이지 않도록, 서버 상태가 반영될 때마다 버튼을 다시 활성화한다
+  btn.disabled = false;
+
+  if (systemOperating) {
+    card.classList.remove('stopped');
+    title.textContent = '시스템 정상 작동 중';
+    sub.textContent = '모든 로봇이 정상적으로 배식을 진행하고 있습니다';
+    btn.textContent = '🛑 작동 중지';
+    btn.classList.remove('resume');
+    menuBtn.disabled = false;
+  } else {
+    card.classList.add('stopped');
+    title.textContent = '시스템 작동 중지됨';
+    const timeStr = lastSystemUpdatedAt
+      ? new Date(lastSystemUpdatedAt).toLocaleTimeString('ko-KR', { hour12: false })
+      : null;
+    const parts = ['모든 로봇이 배식을 중단했습니다'];
+    if (lastSystemReason) parts.push(`사유: ${lastSystemReason}`);
+    if (timeStr) parts.push(`${timeStr}에 중지됨`);
+    sub.textContent = parts.join(' · ');
+    btn.textContent = '▶️ 작동 재개';
+    btn.classList.add('resume');
+    menuBtn.disabled = true;
+  }
+}
+
+/* ══════════════════════════════════════
+   데이터 처리 및 UI 업데이트
+══════════════════════════════════════ */
+
+// 0. 오늘의 메뉴 감시 (관리자가 저장한 메뉴명)
+db.ref('menu').on('value', snap => {
+  const m = snap.val() || {};
+  menuLabels['밥']   = m['밥']   || '밥';
+  menuLabels['국']   = m['국']   || '국';
+  menuLabels['김치'] = m['김치'] || '김치';
+
+  renderMenuToday();
+
+  renderRobots();
+});
+
+// 0-0-1. 메뉴별 알레르기 사항 감시
+db.ref('menuAllergies').on('value', snap => {
+  const a = snap.val() || {};
+  menuAllergies['밥'] = a['밥'] || '';
+  menuAllergies['국'] = a['국'] || '';
+  menuAllergies['김치'] = a['김치'] || '';
+  updateAllergySummaries();
+});
+
+// 0-1. 시스템 작동 상태 감시 (작동중지 기능)
+db.ref('system').on('value', snap => {
+  const s = snap.val();
+  systemOperating = s ? (s.operating !== false) : true;
+  lastSystemUpdatedAt = s ? (s.updatedAt || null) : null;
+  lastSystemReason = s ? (s.reason || null) : null;
+
+  renderSystemStatus();
+  renderRobots();
+  window.renderSeatOverview?.();
+});
+
+// 0-2. Firebase 연결 상태 감시 — 끊기면 화면이 "정상"처럼 멈춰있는 걸 방지
+db.ref('.info/connected').on('value', snap => {
+  const connected = snap.val() === true;
+  const badge = document.getElementById('connection-badge');
+  const text  = document.getElementById('connection-text');
+  if (!badge || !text) return;
+
+  if (connected) {
+    badge.classList.remove('offline');
+    text.textContent = '연결됨';
+  } else {
+    badge.classList.add('offline');
+    const now = new Date().toLocaleTimeString('ko-KR', { hour12: false });
+    text.textContent = `연결 끊김 · ${now} 이후 갱신 안 됨`;
+  }
+});
+
+// 2. 로봇 데이터 감시 (A, B, C)
+db.ref('robots').on('value', snap => {
+  lastRobots = snap.val();
+  renderRobots();
+});
+
+/* ══════════════════════════════════════
+   메뉴 설정 모달 로직
+══════════════════════════════════════ */
+const menuModal = document.getElementById('menu-modal-overlay');
+const menuToast = document.getElementById('menu-saved-toast');
+
+function updateAllergySummaries() {
+  FOOD_NAMES.forEach(cat => {
+    const el = document.getElementById(`allergy-summary-${cat}`);
+    if (!el) return;
+    const value = String(menuAllergies[cat] || '').trim();
+    if (value) {
+      el.textContent = `알레르기: ${value}`;
+      el.classList.add('has-value');
+    } else {
+      el.textContent = '입력된 알레르기 사항 없음';
+      el.classList.remove('has-value');
+    }
+  });
+}
+
+function openMenuModal() {
+  if (document.getElementById('btn-open-menu-modal').disabled) return;
+  document.getElementById('menu-input-밥').value = menuLabels['밥'] === '밥' ? '' : menuLabels['밥'];
+  document.getElementById('menu-input-국').value = menuLabels['국'] === '국' ? '' : menuLabels['국'];
+  document.getElementById('menu-input-김치').value = menuLabels['김치'] === '김치' ? '' : menuLabels['김치'];
+  updateAllergySummaries();
+  menuModal.classList.add('open');
+}
+
+function closeMenuModal() {
+  menuModal.classList.remove('open');
+}
+
+const allergyModal = document.getElementById('allergy-modal-overlay');
+const allergyModalInput = document.getElementById('allergy-modal-input');
+const allergyModalSub = document.getElementById('allergy-modal-sub');
+let editingAllergyCategory = null;
+
+function openAllergyModal(category) {
+  editingAllergyCategory = category;
+  const menuName = menuLabels[category] || category;
+  allergyModalSub.textContent = `${menuName}의 알레르기 유발 식품 정보를 직접 입력하세요.`;
+  allergyModalInput.value = menuAllergies[category] || '';
+  allergyModal.classList.add('open');
+  setTimeout(() => allergyModalInput.focus(), 50);
+}
+
+function closeAllergyModal() {
+  editingAllergyCategory = null;
+  allergyModal.classList.remove('open');
+}
+
+document.querySelectorAll('.allergy-edit-btn').forEach(btn => {
+  btn.addEventListener('click', () => openAllergyModal(btn.dataset.allergyCategory));
+});
+
+document.getElementById('allergy-modal-cancel').addEventListener('click', closeAllergyModal);
+
+allergyModal.addEventListener('click', e => {
+  if (e.target === allergyModal) closeAllergyModal();
+});
+
+document.getElementById('allergy-modal-save').addEventListener('click', () => {
+  if (!editingAllergyCategory) return;
+
+  const category = editingAllergyCategory;
+  const value = allergyModalInput.value.trim();
+  const saveBtn = document.getElementById('allergy-modal-save');
+  saveBtn.disabled = true;
+
+  db.ref(`menuAllergies/${category}`).set(value)
+    .then(() => {
+      menuAllergies[category] = value;
+      updateAllergySummaries();
+      closeAllergyModal();
+    })
+    .catch(err => alert('알레르기 사항 저장에 실패했습니다: ' + err.message))
+    .finally(() => { saveBtn.disabled = false; });
+});
+
+function showToast(el) {
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+document.getElementById('btn-open-menu-modal').addEventListener('click', openMenuModal);
+document.getElementById('menu-modal-cancel').addEventListener('click', closeMenuModal);
+
+// 오버레이 바깥 클릭 시 닫기
+menuModal.addEventListener('click', (e) => {
+  if (e.target === menuModal) closeMenuModal();
+});
+
+document.getElementById('menu-modal-save').addEventListener('click', () => {
+  const rice = document.getElementById('menu-input-밥').value.trim() || '밥';
+  const soup = document.getElementById('menu-input-국').value.trim() || '국';
+  const kimchi = document.getElementById('menu-input-김치').value.trim() || '김치';
+
+  db.ref('menu').set({
+    "밥": rice,
+    "국": soup,
+    "김치": kimchi,
+    updatedAt: Date.now()
+  }).then(() => {
+    closeMenuModal();
+    showToast(menuToast);
+  }).catch(err => {
+    alert('메뉴 저장에 실패했습니다: ' + err.message);
+  });
+});
+
+/* ══════════════════════════════════════
+   작동 중지 / 재개 로직
+══════════════════════════════════════ */
+const stopModal = document.getElementById('stop-modal-overlay');
+const systemToast = document.getElementById('system-saved-toast');
+const stopReasonSelect = document.getElementById('stop-reason-select');
+const stopReasonOtherWrap = document.getElementById('stop-reason-other-wrap');
+const stopReasonOtherInput = document.getElementById('stop-reason-other');
+
+function resetStopModalFields() {
+  stopReasonSelect.value = stopReasonSelect.options[0].value;
+  stopReasonOtherInput.value = '';
+  stopReasonOtherWrap.style.display = 'none';
+}
+
+stopReasonSelect.addEventListener('change', () => {
+  stopReasonOtherWrap.style.display = stopReasonSelect.value === '__other__' ? 'block' : 'none';
+});
+
+document.getElementById('btn-system-toggle').addEventListener('click', (e) => {
+  if (systemOperating) {
+    // 중지는 되돌리기 어려운 동작이므로 확인 모달을 거친다 (버튼은 모달의 확인 버튼에서 잠근다)
+    resetStopModalFields();
+    stopModal.classList.add('open');
+  } else {
+    // 재개는 즉시 적용 — 연타로 중복 요청이 쌓이지 않도록 응답 전까지 버튼을 잠근다, 중지 사유도 초기화
+    e.currentTarget.disabled = true;
+    db.ref('system').set({ operating: true, updatedAt: Date.now(), reason: null }).catch(err => {
+      alert('작동 재개에 실패했습니다: ' + err.message);
+      e.currentTarget.disabled = false;
+    });
+  }
+});
+
+document.getElementById('stop-modal-cancel').addEventListener('click', () => {
+  stopModal.classList.remove('open');
+});
+
+stopModal.addEventListener('click', (e) => {
+  if (e.target === stopModal) stopModal.classList.remove('open');
+});
+
+document.getElementById('stop-modal-confirm').addEventListener('click', (e) => {
+  let reason = stopReasonSelect.value;
+  if (reason === '__other__') {
+    reason = stopReasonOtherInput.value.trim();
+    if (!reason) {
+      alert('중지 사유를 입력해주세요.');
+      stopReasonOtherInput.focus();
+      return;
+    }
+  }
+
+  const confirmBtn = e.currentTarget;
+  confirmBtn.disabled = true; // 연타 방지 — 응답이 올 때까지 잠깐 잠근다
+
+  db.ref('system').set({ operating: false, reason: reason, updatedAt: Date.now() }).then(() => {
+    stopModal.classList.remove('open');
+    showToast(systemToast);
+  }).catch(err => {
+    alert('작동 중지에 실패했습니다: ' + err.message);
+  }).finally(() => {
+    confirmBtn.disabled = false;
+  });
+});
+
+// 초기 렌더 (Firebase 응답 전 기본 표시)
+renderMenuToday();
+
+renderRobots();
+renderSystemStatus();
+updateAllergySummaries();
+
+// 시계 업데이트
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('ko-KR', {hour12:false});
+}, 1000);
+</script>
+
+
+<script>
+// Seat overview model start
+(function(root){
+ 'use strict';
+ function seoul(now=Date.now()){
+  const parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(now)).map(p=>[p.type,p.value]));
+  return {date:`${parts.year}-${parts.month}-${parts.day}`,time:`${parts.hour}:${parts.minute}`};
+ }
+ function layout(raw){
+  if(raw?.schemaVersion!==1||!Number.isInteger(raw.columns)||!Number.isInteger(raw.rows)||raw.columns<6||raw.columns>60||raw.rows<6||raw.rows>60||!raw.tables)throw Error('저장된 급식실 배치도를 확인해 주세요.');
+  const tables=Object.values(raw.tables),ids=new Set(),seats=[];
+  if(!tables.length||tables.length>100)throw Error('테이블이 있는 배치도를 먼저 저장해 주세요.');
+  for(const t of tables){
+   if(!/^t_[-_a-zA-Z0-9]+$/.test(t.id)||ids.has(t.id)||![2,4,6,8].includes(t.capacity)||![0,90].includes(t.rotation)||!['flex','onsite','reservation'].includes(t.zone)||!Number.isInteger(t.x)||!Number.isInteger(t.y)||t.x<0||t.y<0||t.x+(t.rotation===90?3:6)>raw.columns||t.y+(t.rotation===90?6:3)>raw.rows)throw Error('배치도의 테이블 위치와 좌석 수를 확인해 주세요.');
+   ids.add(t.id);
+   for(let i=0;i<t.capacity;i++){
+    const half=t.capacity/2,x=1+(i%half)*4/Math.max(1,half-1),y=i<half?.35:2.65;
+    seats.push({id:`${t.id}_s${i+1}`,label:`${String(t.label||t.id).slice(0,20)}-${i+1}`,number:i+1,tableId:t.id,x:t.x+(t.rotation===90?3-y:x),y:t.y+(t.rotation===90?x:y)});
+   }
+  }
+  for(let i=0;i<tables.length;i++)for(let j=i+1;j<tables.length;j++){
+   const a=tables[i],b=tables[j];if(a.x<b.x+(b.rotation===90?3:6)&&a.x+(a.rotation===90?3:6)>b.x&&a.y<b.y+(b.rotation===90?6:3)&&a.y+(a.rotation===90?6:3)>b.y)throw Error('테이블이 겹친 배치도입니다. 배치도 편집기에서 확인해 주세요.');
+  }
+  return {name:String(raw.name||'급식실').slice(0,60),columns:raw.columns,rows:raw.rows,tables,seats};
+ }
+ function build({state,fallback,config,operating=true,now=Date.now()}){
+  const clock=seoul(now),plan=layout(state?.meta?.layout??fallback),valid=new Set(plan.seats.map(s=>s.id)),used=new Set(),reserved=new Set();let mismatch=false;
+  const slots=state?.meta?.slots??config?.slots??{},slot=Object.values(slots).find(s=>typeof s.start==='string'&&typeof s.end==='string'&&s.start<=clock.time&&clock.time<s.end);
+  if(state?.meta?.date&&state.meta.date!==clock.date)throw Error('오늘 날짜의 좌석 정보를 불러오고 있습니다.');
+  for(const visit of Object.values(state?.arrivals||{}))if(visit?.status==='seated'){if(valid.has(visit.seatId))used.add(visit.seatId);else mismatch=true;}
+  for(const g of Object.values(state?.groups||{}))if(slot&&g?.status==='reserved'&&g.slotId===slot.id){
+   for(const [uid,id] of Object.entries(g.reservation?.assignments||{})){
+    const visit=state?.arrivals?.[uid];if(visit?.status==='released'&&visit.groupId===g.id)continue;
+    if(!valid.has(id)){mismatch=true;continue;}if(!used.has(id))reserved.add(id);
+   }
+  }
+  const free=plan.seats.length-used.size-reserved.size,open=config?.enabled===true&&operating&&!!slot&&!mismatch;
+  return {...plan,date:clock.date,time:clock.time,slot,used:used.size,reserved:reserved.size,free,total:plan.seats.length,available:open?free:0,open,mismatch,seats:plan.seats.map(s=>({...s,status:used.has(s.id)?'used':reserved.has(s.id)?'reserved':'free'}))};
+ }
+ root.CafeteriaSeatOverview={seoul,layout,build};
+})(globalThis);
+// Seat overview model end
+
+(function(){
+ 'use strict';
+ const M=CafeteriaSeatOverview,get=id=>document.getElementById(id);
+ let day='',state=null,config=null,fallback=null,connected=false,stateReady=false,configReady=false,layoutReady=false,layoutKey='',layoutRef=null,layoutHandler=null,dayRef=null,dayHandler=null,lastUpdate=null,signature='',errors={};
+ function unknown(message){for(const id of ['total','used','reserved','available'])get('seat-'+id).textContent='—';get('seat-summary').textContent=message;get('seat-map').innerHTML='<p class="seat-empty">'+esc(message)+'</p>';get('seat-live').textContent='확인 필요';get('seat-live').classList.add('stale');}
+ function draw(plan){
+  const u=28,p=24,w=plan.columns*u+p*2,h=plan.rows*u+p*2,zones={flex:'전환 가능',onsite:'현장 우선',reservation:'예약 우선'},colors={free:['#daf0e3','#31875b','빈 좌석'],used:['#ffd9d5','#c74545','사용 중'],reserved:['#ffedbd','#bc8421','예약 대기']};
+  const tables=plan.tables.map(t=>{const vertical=t.rotation===90,x=p+(t.x+(vertical?.75:.55))*u,y=p+(t.y+(vertical?.55:.75))*u,width=(vertical?1.5:4.9)*u,height=(vertical?4.9:1.5)*u,cx=x+width/2,cy=y+height/2,label=String(t.label||t.id);return `<g><rect x="${x}" y="${y}" width="${width}" height="${height}" rx="9" fill="#eee9e1" stroke="#d3cabd"/><text x="${cx}" y="${cy-3}" text-anchor="middle" font-size="13" font-weight="700" fill="#554d42">${esc(label.slice(0,9))}</text>${!vertical?`<text x="${cx}" y="${cy+13}" text-anchor="middle" font-size="9" fill="#82776a">${zones[t.zone]}</text>`:''}</g>`;}).join('');
+  const seats=plan.seats.map(s=>{const [fill,stroke,label]=colors[s.status],x=p+s.x*u,y=p+s.y*u;return `<g class="seat-chair" data-seat-id="${esc(s.id)}" data-status="${s.status}" tabindex="0" role="img" aria-label="${esc(s.label+' · '+label)}"><title>${esc(s.label+' · '+label)}</title><circle cx="${x}" cy="${y}" r="11" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/><text x="${x}" y="${y+3.5}" text-anchor="middle" font-size="10" font-weight="700" fill="${stroke}" aria-hidden="true">${s.number}</text></g>`;}).join('');
+  get('seat-map').innerHTML=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" style="min-width:${Math.max(460,plan.columns*18)}px" role="group" aria-label="${esc(plan.name+' 좌석 현황')}"><defs><pattern id="seat-grid" width="28" height="28" patternUnits="userSpaceOnUse"><path d="M 28 0 L 0 0 0 28" fill="none" stroke="#eeeae3" stroke-width=".7"/></pattern></defs><rect width="${w}" height="${h}" fill="url(#seat-grid)"/>${tables}${seats}</svg>`;
+ }
+ function render(){
+  get('seat-date').textContent=day;
+  if(!stateReady||!configReady){unknown(errors.state||errors.config||'좌석 정보를 불러오는 중입니다.');return;}
+  if(!state?.meta?.layout&&!layoutReady){unknown(errors.config||errors.layout||'저장된 급식실 배치도를 불러오는 중입니다.');return;}
+  try{
+   const plan=M.build({state,fallback,config,operating:systemOperating}),issue=errors.state||errors.config||(!state?.meta?.layout&&errors.layout)||(!connected?'연결이 끊겨 마지막으로 받은 좌석 현황입니다.':null);
+   const key=JSON.stringify([plan,issue,systemOperating]);if(key===signature)return;signature=key;
+   get('seat-plan-name').textContent=plan.name;get('seat-total').textContent=plan.total;get('seat-used').textContent=plan.used;get('seat-reserved').textContent=plan.reserved;get('seat-available').textContent=issue||plan.mismatch?'—':plan.available;
+   get('seat-slot').textContent=plan.slot?`${plan.slot.label||'현재 시간대'} · ${plan.slot.start}–${plan.slot.end}`:'현재 이용 가능한 배식 시간대가 아닙니다.';
+   get('seat-summary').textContent=issue|| (plan.mismatch?'배치도와 좌석 기록이 맞지 않습니다. 배치도 버전을 확인해 주세요.':`전체 ${plan.total}석 중 ${plan.used}석 사용 중 · ${plan.reserved}석 예약 대기 · 배식 가능 ${plan.available}석`);
+   if(!issue&&!plan.open&&!plan.mismatch)get('seat-summary').textContent+=!systemOperating?' · 시스템 작동 중지':config?.enabled!==true?' · 좌석 운영이 열려 있지 않습니다.':` · 현재 배식 시간 외 (빈 좌석 ${plan.free}석)`;
+   get('seat-live').textContent=issue?'연결 확인 필요':'실시간 반영';get('seat-live').classList.toggle('stale',!!issue);draw(plan);
+   get('seat-update').textContent=lastUpdate?'마지막 수신 '+new Date(lastUpdate).toLocaleTimeString('ko-KR',{hour12:false,timeZone:'Asia/Seoul'})+' · 입장·반납 시 자동 갱신됩니다. 좁은 화면에서는 배치도를 좌우로 움직여 확인하세요.':'좌석 입장·반납 기록을 실시간으로 표시합니다.';
+  }catch(error){signature='';unknown(errors.layout||error.message);}
+ }
+ function bindLayout(){
+  const id=config?.layoutVersionId,key=typeof id==='string'&&/^[-_a-zA-Z0-9]+$/.test(id)?id:'latest';
+  if(key===layoutKey)return;if(layoutRef)layoutRef.off('value',layoutHandler);layoutKey=key;fallback=null;layoutReady=false;delete errors.layout;
+  layoutRef=key==='latest'?db.ref('cafeteriaLayoutEditor/layoutVersions').orderByKey().limitToLast(1):db.ref('cafeteriaLayoutEditor/layoutVersions/'+key);
+  layoutHandler=layoutRef.on('value',snap=>{const raw=snap.val();fallback=key==='latest'?Object.values(raw||{})[0]||null:raw;layoutReady=true;delete errors.layout;lastUpdate=Date.now();signature='';render();},()=>{layoutReady=true;errors.layout='급식실 배치도를 읽을 수 없습니다. 연결과 읽기 권한을 확인해 주세요.';signature='';render();});
+ }
+ function bindDay(){
+  const next=M.seoul().date;if(next===day)return;if(dayRef)dayRef.off('value',dayHandler);day=next;state=null;stateReady=false;delete errors.state;signature='';
+  dayRef=db.ref('cafeteriaSeatReservations/days/'+day);dayHandler=dayRef.on('value',snap=>{state=snap.val();stateReady=true;delete errors.state;lastUpdate=Date.now();signature='';render();},()=>{stateReady=true;errors.state='좌석 현황을 읽을 수 없습니다. 연결과 읽기 권한을 확인해 주세요.';signature='';render();});render();
+ }
+ window.renderSeatOverview=render;
+ db.ref('cafeteriaLayoutEditor/reservationConfig').on('value',snap=>{config=snap.val();configReady=true;delete errors.config;bindLayout();signature='';render();},()=>{configReady=true;errors.config='좌석 운영 설정을 읽을 수 없습니다.';signature='';render();});
+ db.ref('.info/connected').on('value',snap=>{connected=snap.val()===true;signature='';render();});
+ bindDay();setInterval(()=>{bindDay();render();},15000);
+})();
+
+</script>
+</body>
+</html>
