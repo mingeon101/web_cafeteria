@@ -680,7 +680,52 @@
       }
     }
   </style>
-<script src="/allergy-core.js?v=1"></script><link rel="stylesheet" href="/allergy-ui.css?v=1"></head>
+<script data-allergy-inline="core">
+(function(root){
+ 'use strict';
+ // Allergen numbers: https://www.ice.go.kr/icefood/cm/cntnts/cntntsView.do?cntntsId=629&mi=10779
+ const names=['난류','우유','메밀','땅콩','대두','밀','고등어','게','새우','돼지고기','복숭아','토마토','아황산류','호두','닭고기','쇠고기','오징어','조개류','잣'];
+ const aliases={계란:'난류',달걀:'난류',달걀류:'난류',난백:'난류',난황:'난류',egg:'난류',eggs:'난류',milk:'우유',콩:'대두',soy:'대두',대두콩:'대두',wheat:'밀',소고기:'쇠고기',소:'쇠고기',아황산염:'아황산류',굴:'조개류',전복:'조개류',홍합:'조개류',조개:'조개류'};
+ function normalize(value){
+  const out=new Set();
+  function add(v){
+   if(v===null||v===undefined||v===false)return;
+   if(Array.isArray(v)){v.forEach(add);return;}
+   if(typeof v==='object'){for(const [k,x] of Object.entries(v)){if(x===true)add(k);else add(x);}return;}
+   let text=String(v).replace(/[①-⑲]/g,c=>','+(c.charCodeAt(0)-0x2460+1)+',').normalize('NFKC');
+   if(/^(없음|해당없음|알레르기없음|none|0|-)$/i.test(text.replace(/\s/g,'')))return;
+   text=text.replace(/조개류\([^)]*\)/g,'조개류');
+   for(let token of text.split(/[,;\/|·\n]+/)){
+    token=token.trim();if(!token)continue;
+    if(/^[\d.\s()]+$/.test(token)){for(const n of token.match(/\d+/g)||[])if(+n>=1&&+n<=19)out.add(names[+n-1]);continue;}
+    token=token.replace(/^([^()]+)\(.*$/,'$1').replace(/[()]/g,'').replace(/^\d{1,2}[.)]\s*/,'').replace(/\s*(함유|알레르기)\s*$/,'').replace(/\s+/g,'').toLowerCase();
+    if(token)out.add(aliases[token]||names.find(n=>n===token)||token.slice(0,40));
+   }
+  }add(value);return [...out].sort();
+ }
+ function info(value){
+  if(value===null||value===undefined||typeof value==='string'&&(!value.trim()||/^(미등록|정보\s*없음|확인\s*필요)$/.test(value.trim())))return{known:false,tokens:[]};
+  return{known:true,tokens:normalize(value)};
+ }
+ function evaluate(student,menu,metadata,foods=['밥','국','김치']){
+  const mine=normalize(student),perFood=metadata&&typeof metadata==='object'&&!Array.isArray(metadata)&&foods.some(f=>Object.hasOwn(metadata,f));
+  return foods.map(food=>{
+   if(!mine.length)return{food,blocked:false,matches:[],unknown:false,global:false};
+   let data=info(perFood?metadata[food]:metadata);
+   if(!perFood&&Array.isArray(metadata)&&!metadata.length)data={known:false,tokens:[]};
+   const annotations=[...String(menu?.[food]||'').matchAll(/[（(]([\d.\s,·]+)[）)]/g)].flatMap(m=>normalize(m[1]));
+   const tokens=new Set([...data.tokens,...annotations]),known=data.known||annotations.length>0,matches=mine.filter(x=>tokens.has(x));
+   return{food,blocked:!known||matches.length>0,matches,unknown:!known,global:!perFood&&matches.length>0};
+  });
+ }
+ function sanitize(counts,statuses){return counts.map((v,i)=>statuses[i]?.blocked?0:Math.max(0,Number(v)||0));}
+ root.CafeteriaAllergy={names,normalize,evaluate,sanitize};
+})(globalThis);
+</script><style data-allergy-inline="style">
+.allergy-blocked{background:#fff0f0!important;border:2px solid #d74747!important;color:#a51f2b!important}.allergy-note{display:block;color:#ad2430;font-size:13px;font-weight:800;line-height:1.6;margin:9px 0;overflow-wrap:anywhere}.allergy-blocked button:disabled,.allergy-blocked input:disabled{opacity:.45;cursor:not-allowed}.allergy-banner{border:1px solid #edb7bb;background:#fff3f3;color:#9e2530;border-radius:13px;padding:12px 15px;margin:12px 0;font-size:14px;line-height:1.7}.allergy-fieldset{grid-column:1/-1;border:1px solid #c8e1e8;border-radius:12px;padding:14px;min-width:0}.allergy-fieldset legend{font-weight:800;padding:0 6px}.allergy-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:9px}.allergy-options label{display:flex;align-items:center;gap:7px;font-size:13px;margin:0;padding:5px}.allergy-options input{width:auto!important;accent-color:#bc293b}.allergy-fieldset p{font-size:12px;line-height:1.7;color:#526a72;margin:8px 0}.allergy-extra{margin-top:10px}.student-allergy-value{color:#ac2634;max-width:220px;overflow-wrap:anywhere}
+
+.food-circle.allergy-blocked{aspect-ratio:auto;min-height:175px;border-radius:26px;padding:12px 5px}.food-circle.allergy-blocked .allergy-note{font-size:11px;text-align:center;max-width:95%;margin:7px auto}.final-row.allergy-blocked,.edit-row.allergy-blocked{flex-wrap:wrap}.final-row.allergy-blocked>.allergy-note,.edit-row.allergy-blocked>.allergy-note{flex:0 0 100%;width:100%;text-align:center}
+</style></head>
 
 <body data-allergy-mode="serve">
   <div id="app">
@@ -4894,5 +4939,55 @@ await AllergyClient.refresh();AllergyClient.sanitize(counts);
 
 </script>
 <!-- AUTO-SEAT-ARRIVAL:END -->
-<script src="/allergy-client.js?v=1"></script></body>
+<script data-allergy-inline="client">
+(function(){
+ 'use strict';
+ const A=CafeteriaAllergy,preorder=document.body.dataset.allergyMode==='preorder';
+ let uid=null,meal='',values={},ready={},subscriptions=[],failure='',signature='';
+ const status=()=>failure||!uid||!['student','menu','metadata'].every(k=>ready[k])?FOODS.map(food=>({food,blocked:!!uid,unknown:true,matches:[]})):A.evaluate(values.student,values.menu,values.metadata,FOODS);
+ function blocked(i){return !!status()[i]?.blocked;}
+ function sanitize(array){const next=A.sanitize(array,status());array.splice(0,array.length,...next);return array;}
+ function disable(el,value){if(value){if(!el.hasAttribute('data-allergy-disabled'))el.dataset.allergyDisabled=String(el.disabled);el.disabled=true;}else if(el.hasAttribute('data-allergy-disabled')){el.disabled=el.dataset.allergyDisabled==='true';delete el.dataset.allergyDisabled;}}
+ function decorate(card,i){
+  if(!card)return;const s=status()[i],bad=!!s?.blocked;card.classList.toggle('allergy-blocked',bad);
+  let note=card.querySelector(':scope > .allergy-note');if(bad){if(!note){note=document.createElement('span');note.className='allergy-note';note.setAttribute('role','status');card.append(note);}note.textContent=s.unknown?'알레르기 정보 확인 필요 · 선택 및 배식 불가':'알레르기 함유 음식 · 선택 및 배식 불가 ('+s.matches.join(', ')+')'+(s.global?' · 급식 전체 정보 기준':'');}else note?.remove();
+  card.querySelectorAll('button,input').forEach(el=>{if(['serve-next'].includes(el.id))return;disable(el,bad);});
+ }
+ function paint(){
+  if(!uid)return;
+  for(const selector of preorder?['#preorder-food-grid > .food-circle','#final-confirm-list > .final-row']:['#menu-grid > .menu-chip','#preorder-counts > .preorder-count','#progress-list > .progress-item','#edit-rows > .edit-row'])document.querySelectorAll(selector).forEach(decorate);
+  if(!preorder){if(!failure&&['student','menu','metadata'].every(k=>ready[k])&&blocked(serveStep)){counts[serveStep]=0;const count=document.getElementById('serve-count-display');if(count)count.textContent='0';}const target=document.getElementById('serve-food-name')?.closest('.card');if(target)decorate(target,serveStep);document.querySelectorAll('#progress-list > .progress-item').forEach((el,i)=>{if(blocked(i)){el.querySelector('.progress-state').textContent='배식 차단';el.querySelector('.progress-icon').textContent='⛔';}});}
+  for(const parent of preorder?['page-preorder','page-final-confirm']:['page-dashboard','page-serve']){
+   const box=document.getElementById(parent);if(!box)continue;let note=box.querySelector(':scope > .allergy-banner');if(!note){note=document.createElement('p');note.className='allergy-banner';note.setAttribute('role','status');box.prepend(note);}
+   const list=A.normalize(values.student),hasBlocked=status().some(x=>x.blocked);
+   note.hidden=!failure&&!list.length&&!hasBlocked;
+   note.textContent=failure||(!ready.student?'학생 알레르기 정보를 확인 중입니다.':list.length?'학생 알레르기: '+list.join(', ')+(hasBlocked?' · 빨간색 음식은 수량 0으로 제외됩니다.':''):'');
+  }
+ }
+ function changed(){
+  if(preorder){if(!failure&&['student','menu','metadata'].every(k=>ready[k]))sanitize(preorderCounts);renderPreorderSelection();renderFinalConfirm();}
+  paint();
+ }
+ function context(){return{uid:user?.uid||null,meal:preorder&&typeof pmMeal!=='undefined'?pmMeal:'lunch'};}
+ function bind(){
+  const next=context();if(next.uid===uid&&next.meal===meal)return;
+  for(const [ref,fn] of subscriptions)ref.off('value',fn);subscriptions=[];uid=next.uid;meal=next.meal;values={};ready={};failure='';signature='';
+  if(!uid){document.querySelectorAll('.allergy-banner,.allergy-note').forEach(n=>n.remove());document.querySelectorAll('.allergy-blocked').forEach(n=>n.classList.remove('allergy-blocked'));document.querySelectorAll('[data-allergy-disabled]').forEach(n=>disable(n,false));return;}
+  for(const [key,path] of [['student',`students/${uid}/allergies`],['menu',meal==='dinner'?'menus/dinner':'menu'],['metadata',meal==='dinner'?'menuAllergiesDinner':'menuAllergies']]){
+   const expected=uid,expectedMeal=meal,ref=db.ref(path),fn=ref.on('value',snap=>{if(uid!==expected||meal!==expectedMeal)return;values[key]=snap.val()??(key==='student'?[]:null);ready[key]=true;failure='';changed();},()=>{if(uid!==expected||meal!==expectedMeal)return;ready[key]=false;failure='알레르기 정보를 불러오지 못했습니다. 확인 전에는 선택·배식을 진행할 수 없습니다.';changed();});subscriptions.push([ref,fn]);
+  }paint();
+ }
+ async function refresh(){
+  bind();const expected=uid,expectedMeal=meal;if(!expected)throw Error('학생을 먼저 확인해 주세요.');
+  try{
+   const paths=[`students/${expected}/allergies`,expectedMeal==='dinner'?'menus/dinner':'menu',expectedMeal==='dinner'?'menuAllergiesDinner':'menuAllergies'];
+   const snaps=await Promise.all(paths.map(p=>db.ref(p).once('value')));
+   const active=context();if(active.uid!==expected||active.meal!==expectedMeal)throw Error('학생 또는 급식이 변경되었습니다. 다시 확인해 주세요.');
+   values={student:snaps[0].val()??[],menu:snaps[1].val(),metadata:snaps[2].val()};ready={student:true,menu:true,metadata:true};failure='';changed();return status();
+  }catch(error){failure='알레르기 정보 확인 실패 · 선택 및 배식 불가';paint();throw error;}
+ }
+ window.AllergyClient={blocked,sanitize,paint,refresh,status,ready:()=>!failure&&['student','menu','metadata'].every(k=>ready[k])};
+ setInterval(()=>{bind();const next=JSON.stringify([uid,meal,values,ready,failure]);if(next!==signature){signature=next;changed();}},250);bind();
+})();
+</script></body>
 </html>
