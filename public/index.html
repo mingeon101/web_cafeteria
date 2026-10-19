@@ -715,7 +715,7 @@
    if(!perFood&&Array.isArray(metadata)&&!metadata.length)data={known:false,tokens:[]};
    const annotations=[...String(menu?.[food]||'').matchAll(/[（(]([\d.\s,·]+)[）)]/g)].flatMap(m=>normalize(m[1]));
    const tokens=new Set([...data.tokens,...annotations]),known=data.known||annotations.length>0,matches=mine.filter(x=>tokens.has(x));
-   return{food,blocked:!known||matches.length>0,matches,unknown:!known,global:!perFood&&matches.length>0};
+   return{food,blocked:matches.length>0,matches,unknown:!known,global:!perFood&&matches.length>0};
   });
  }
  function sanitize(counts,statuses){return counts.map((v,i)=>statuses[i]?.blocked?0:Math.max(0,Number(v)||0));}
@@ -3239,7 +3239,7 @@ ${JSON.stringify(summary)}
 
     async function startServe() {
 try{await AllergyClient.refresh();}catch(error){alert('알레르기 정보 확인 실패 · 배식을 진행할 수 없습니다.');return;}
-if(AllergyClient.status().every(x=>x.blocked)){goPage('dashboard');renderDashboardMenu();AllergyClient.paint();alert('모든 음식이 알레르기 함유 또는 정보 확인 대상으로 배식이 차단되었습니다.');return;}
+if(AllergyClient.status().every(x=>x.blocked)){goPage('dashboard');renderDashboardMenu();AllergyClient.paint();alert('모든 음식에 등록된 알레르기가 함유되어 배식이 차단되었습니다.');return;}
 
 
       counts = [
