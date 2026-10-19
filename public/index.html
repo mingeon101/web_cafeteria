@@ -680,9 +680,9 @@
       }
     }
   </style>
-</head>
+<script src="/allergy-core.js?v=1"></script><link rel="stylesheet" href="/allergy-ui.css?v=1"></head>
 
-<body>
+<body data-allergy-mode="serve">
   <div id="app">
 
     <div class="header">
@@ -2654,7 +2654,8 @@
           )
           .join("");
 
-    }
+    window.AllergyClient?.paint();
+}
 
     async function loadTodayPreorder() {
 
@@ -3192,6 +3193,9 @@ ${JSON.stringify(summary)}
     }
 
     async function startServe() {
+try{await AllergyClient.refresh();}catch(error){alert('알레르기 정보 확인 실패 · 배식을 진행할 수 없습니다.');return;}
+if(AllergyClient.status().every(x=>x.blocked)){goPage('dashboard');renderDashboardMenu();AllergyClient.paint();alert('모든 음식이 알레르기 함유 또는 정보 확인 대상으로 배식이 차단되었습니다.');return;}
+
 
       counts = [
         0,
@@ -3246,6 +3250,7 @@ ${JSON.stringify(summary)}
 
       serveStep =
         0;
+      while(serveStep<FOODS.length-1&&AllergyClient.blocked(serveStep))serveStep++;
 
       goPage(
         "serve"
@@ -3312,11 +3317,14 @@ ${JSON.stringify(summary)}
         .textContent =
         "손가락을 보여주세요";
 
-    }
+    window.AllergyClient?.paint();
+}
 
     function setCount(
       value
     ) {
+if(window.AllergyClient?.blocked(serveStep)){counts[serveStep]=0;AllergyClient.paint();return;}
+
 
       counts[serveStep] =
         clamp(
@@ -3724,6 +3732,7 @@ ${JSON.stringify(summary)}
       ) {
 
         serveStep++;
+        while(serveStep<FOODS.length-1&&AllergyClient.blocked(serveStep))serveStep++;
 
         renderServeStep();
 
@@ -3740,6 +3749,8 @@ ${JSON.stringify(summary)}
     }
 
     async function saveServeData() {
+await AllergyClient.refresh();AllergyClient.sanitize(counts);
+
 
       if (
         !user?.uid
@@ -3971,7 +3982,8 @@ ${JSON.stringify(summary)}
           )
           .join("");
 
-    }
+    window.AllergyClient?.paint();
+}
 
     function startProgressTimer() {
 
@@ -4206,7 +4218,8 @@ ${JSON.stringify(summary)}
                       button.dataset.editDelta
                     );
 
-                  counts[index] =
+                  if(window.AllergyClient?.blocked(index)){counts[index]=0;AllergyClient.paint();return;}
+              counts[index] =
                     clamp(
                       counts[index] +
                       delta,
@@ -4227,7 +4240,8 @@ ${JSON.stringify(summary)}
           }
         );
 
-    }
+    window.AllergyClient?.paint();
+}
 
     async function finishProgressEdit() {
 
@@ -4310,6 +4324,8 @@ ${JSON.stringify(summary)}
     }
 
     async function updateCurrentServeData() {
+await AllergyClient.refresh();AllergyClient.sanitize(counts);
+
 
       if (
         !user?.uid ||
@@ -4878,5 +4894,5 @@ ${JSON.stringify(summary)}
 
 </script>
 <!-- AUTO-SEAT-ARRIVAL:END -->
-</body>
+<script src="/allergy-client.js?v=1"></script></body>
 </html>

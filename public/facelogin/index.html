@@ -789,9 +789,9 @@ function reservation(base,cfg,meal){if(!cfg||!base)return base;const rows=cfg.gr
 function sharedWindow(cfg,meal,members,slot){if(!cfg)return slot;let start=slot.start,end=slot.end;for(const p of members){const row=C.forGrade(cfg,p.grade);if(!row)throw Error('학교 구분과 친구의 학년을 확인하세요.');const w=row[meal];start=start>w.start?start:w.start;end=end<w.end?end:w.end;}if(start>=end)throw Error('같이 앉을 학생들의 배식 시간이 겹치지 않습니다. 다른 친구 또는 시간대를 선택하세요.');return{start,end};}
 root.MealIntegration={reservation,sharedWindow};
 })(globalThis);
-</script></head>
+</script><script src="/allergy-core.js?v=1"></script><link rel="stylesheet" href="/allergy-ui.css?v=1"></head>
 
-<body>
+<body data-allergy-mode="preorder">
 
 <div id="app">
 
@@ -2565,6 +2565,7 @@ async function loadExistingPreorder() {
 ============================================================ */
 
 function renderPreorderSelection() {
+ if(window.AllergyClient?.ready())AllergyClient.sanitize(preorderCounts);
 
   const grid =
     document.getElementById(
@@ -2622,6 +2623,7 @@ function renderPreorderSelection() {
       )
       .join("");
 
+window.AllergyClient?.paint();
 }
 
 
@@ -2630,6 +2632,8 @@ function changePreorderCount(
   index,
   amount
 ) {
+if(window.AllergyClient?.blocked(index)){preorderCounts[index]=0;AllergyClient.paint();return;}
+
 
   preorderCounts[index] =
     Math.max(
@@ -2676,6 +2680,7 @@ function openFinalConfirm() {
 
 
 function renderFinalConfirm() {
+ if(window.AllergyClient?.ready())AllergyClient.sanitize(preorderCounts);
 
   const list =
     document.getElementById(
@@ -2741,6 +2746,7 @@ function renderFinalConfirm() {
       )
       .join("");
 
+window.AllergyClient?.paint();
 }
 
 
@@ -2749,6 +2755,8 @@ function changeFinalCount(
   index,
   amount
 ) {
+if(window.AllergyClient?.blocked(index)){preorderCounts[index]=0;AllergyClient.paint();return;}
+
 
   preorderCounts[index] =
     Math.max(
@@ -2808,6 +2816,8 @@ function changeFinalCount(
 ============================================================ */
 
 async function submitFinalPreorder() {
+try{await AllergyClient.refresh();AllergyClient.sanitize(preorderCounts);}catch(error){alert('알레르기 정보를 확인하지 못해 신청을 중단했습니다. 다시 확인해 주세요.');return;}
+
   try{pmAssert();}catch(e){alert(e.message);return;}
 
   if (!user.uid) {
@@ -3575,5 +3585,5 @@ async function recognizeFace() {
 
 </script>
 <!-- SEAT-RESERVATION-ADDON:END -->
-</body>
+<script src="/allergy-client.js?v=1"></script></body>
 </html>
