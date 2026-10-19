@@ -32,7 +32,7 @@
    if(!perFood&&Array.isArray(metadata)&&!metadata.length)data={known:false,tokens:[]};
    const annotations=[...String(menu?.[food]||'').matchAll(/[（(]([\d.\s,·]+)[）)]/g)].flatMap(m=>normalize(m[1]));
    const tokens=new Set([...data.tokens,...annotations]),known=data.known||annotations.length>0,matches=mine.filter(x=>tokens.has(x));
-   return{food,blocked:!known||matches.length>0,matches,unknown:!known,global:!perFood&&matches.length>0};
+   return{food,blocked:matches.length>0,matches,unknown:!known,global:!perFood&&matches.length>0};
   });
  }
  function sanitize(counts,statuses){return counts.map((v,i)=>statuses[i]?.blocked?0:Math.max(0,Number(v)||0));}
