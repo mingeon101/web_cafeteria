@@ -1241,6 +1241,10 @@ const FOODS = [
   "김치"
 ];
 
+function foodDisplayLabel(food) {
+  return food === "김치" ? "반찬" : food;
+}
+
 const EMOJIS = [
   "🍚",
   "🍲",
@@ -2640,7 +2644,7 @@ function renderPreorderSelection() {
 
               <button
                 type="button"
-                aria-label="${food} 감소"
+                aria-label="${foodDisplayLabel(food)} 감소"
                 onclick="changePreorderCount(${index}, -1)"
               >
                 −
@@ -2655,7 +2659,7 @@ function renderPreorderSelection() {
 
               <button
                 type="button"
-                aria-label="${food} 증가"
+                aria-label="${foodDisplayLabel(food)} 증가"
                 onclick="changePreorderCount(${index}, 1)"
               >
                 ＋
@@ -2763,7 +2767,7 @@ function renderFinalConfirm() {
 
               <button
                 type="button"
-                aria-label="${food} 감소"
+                aria-label="${foodDisplayLabel(food)} 감소"
                 onclick="changeFinalCount(${index}, -1)"
               >
                 −
@@ -2778,7 +2782,7 @@ function renderFinalConfirm() {
 
               <button
                 type="button"
-                aria-label="${food} 증가"
+                aria-label="${foodDisplayLabel(food)} 증가"
                 onclick="changeFinalCount(${index}, 1)"
               >
                 ＋
