@@ -952,7 +952,7 @@ root.MealIntegration={reservation,sharedWindow};
 <p class="nr-sub">학생별 배식 기록과 Google Sheets 영양정보를 바탕으로 AI가 작성합니다. 학생을 선택하면 개인 리포트를 직접 작성할 수 있습니다. 저장한 리포트만 학생에게 공개됩니다.</p>
 <div class="nr-controls"><label>급식 구분<select id="nrMeal"><option value="lunch">중식</option><option value="dinner">석식</option></select></label><label>리포트 날짜<input type="date" id="nrDate" required></label><label>작성 대상<select id="nrStudent"><option value="">전체 학생 · 학생별 AI 작성</option></select></label></div>
 <div id="nrAuto"><p class="nr-sub">오늘의 메뉴와 각 학생의 배식 기록(serve)을 Firebase에서 불러옵니다. AI 작성 시 최신 값을 다시 읽으며, 제공량이 없으면 임의로 계산하지 않습니다.</p><div class="nr-controls"><label>시트 영양값 기준<select id="nrBasis"><option value="100g">100g 기준</option><option value="serving">1인분 기준</option></select></label></div><div id="nrPortions" class="nr-sub">1회 기준: 밥·국 200–250g → 225g / 김치·부찬 40–50g → 45g / 주찬 100–120g → 110g<br>배식 횟수 × 중간값으로 추정합니다. 1인분 기준 시트는 위 1회 중량과 같은 기준일 때만 선택하세요.</div><div class="nr-auto-email"><label><input id="nrAutoEmail" type="checkbox"> 리포트 저장 후 학생 등록 이메일로 자동 발송</label></div><button type="button" class="nr-button" id="nrGenerate">AI 리포트 다시 작성</button></div>
-<section class="nr-email-panel" aria-labelledby="nrEmailTitle"><h3 id="nrEmailTitle">학생 리포트 이메일 발송</h3><p class="nr-sub">리포트를 저장한 뒤 수신자 이메일을 입력해 메일 양식을 만들고, 내용을 확인한 다음 발송하세요.</p><label>학생 리포트 페이지 주소<input id="nrReportBaseUrl" type="url" autocomplete="url" placeholder="https://학교주소/report.html"></label><p class="nr-sub">주소를 비우면 현재 페이지를 기준으로 자동 생성합니다. 배포 주소가 다르면 이 칸에 학생 리포트 페이지 주소를 입력하세요.</p></section><form id="nrForm"><div id="nrManual" hidden><div class="nr-fields" id="nrFields"></div><label>오늘의 코멘트<textarea id="nrSummary" rows="3" maxlength="3000" required></textarea></label><label>내일을 위한 코멘트<textarea id="nrTomorrow" rows="3" maxlength="3000" required></textarea></label><label>수치 기준 / 참고사항<textarea id="nrBasisNote" rows="2" maxlength="1000"></textarea></label><p class="nr-sub">확인되지 않은 영양값은 비워두세요. 수동 입력값으로 그래프가 갱신됩니다.</p></div><div id="nrStatus" class="nr-status" role="status" aria-live="polite"></div><div id="nrPreview"></div><button type="submit" class="nr-button nr-secondary" id="nrSave" disabled>저장하고 학생에게 공개</button></form></section><div id="nrLegacy" hidden>
+<section class="nr-email-panel" aria-labelledby="nrEmailTitle"><h3 id="nrEmailTitle">학생 리포트 이메일 발송</h3><p class="nr-sub">리포트를 저장한 뒤 수신자 이메일을 입력해 메일 양식을 만들고, 내용을 확인한 다음 발송하세요.</p><label>학생 리포트 페이지 주소<input id="nrReportBaseUrl" type="url" autocomplete="url" placeholder="https://학교주소/student/"></label><p class="nr-sub">주소를 비우면 현재 페이지를 기준으로 자동 생성합니다. 배포 주소가 다르면 이 칸에 학생 리포트 페이지 주소를 입력하세요.</p></section><form id="nrForm"><div id="nrManual" hidden><div class="nr-fields" id="nrFields"></div><label>오늘의 코멘트<textarea id="nrSummary" rows="3" maxlength="3000" required></textarea></label><label>내일을 위한 코멘트<textarea id="nrTomorrow" rows="3" maxlength="3000" required></textarea></label><label>수치 기준 / 참고사항<textarea id="nrBasisNote" rows="2" maxlength="1000"></textarea></label><p class="nr-sub">확인되지 않은 영양값은 비워두세요. 수동 입력값으로 그래프가 갱신됩니다.</p></div><div id="nrStatus" class="nr-status" role="status" aria-live="polite"></div><div id="nrPreview"></div><button type="submit" class="nr-button nr-secondary" id="nrSave" disabled>저장하고 학생에게 공개</button></form></section><div id="nrLegacy" hidden>
     <div class="page-title">
       <h1>
         급식 관리 대시보드
@@ -3886,10 +3886,15 @@ function nrMealType(){return nrEl('nrMeal').value;}
 function nrMenuPath(){return nrMealType()==='dinner'?'menus/dinner':'menu';}
 function nrPath(uid=nrEl('nrStudent').value,mode='manual'){return `nutritionReports/${nrMealType()==='dinner'?'dinner/':''}${mode==='manual'?'students':'aiStudents'}/${uid}/${nrEl('nrDate').value}`;}
 function nrSetBusy(b){nrBusy=b;['nrMeal','nrDate','nrStudent','nrGenerate','nrBasis','nrAutoEmail'].forEach(id=>nrEl(id).disabled=b);nrEl('nrManual').querySelectorAll('input,textarea').forEach(e=>e.disabled=b);nrEl('nrPortions').querySelectorAll('select').forEach(e=>e.disabled=b);nrEl('nrSave').disabled=b||!(nrDraft||nrDrafts.length);}
-function nrLink(uid){
+function nrLink(uid,date=nrEl('nrDate').value,meal=nrMealType()){
  const configured=nrEl('nrReportBaseUrl')?.value.trim();
- const fallback=new URL('report.html',location.href);
- const u=new URL(configured||fallback,location.href);u.searchParams.set('studentId',uid);u.searchParams.set('date',nrEl('nrDate').value);u.searchParams.set('meal',nrMealType());return u.href;
+ const here=new URL(location.href);
+ const sibling=here.pathname.replace(/\/admin(?:\/index\.html)?\/?$/i,'/student/');
+ const fallback=sibling!==here.pathname?new URL(sibling,here):new URL('student/',here);
+ fallback.search='';fallback.hash='';
+ const u=new URL(configured||fallback,here);
+ u.searchParams.delete('uid');
+ u.searchParams.set('studentId',uid);u.searchParams.set('date',date);u.searchParams.set('meal',meal);return u.href;
 }
 function nrLinkMarkup(uid){return `<p class="nr-sub"><a href="${escapeHTML(nrLink(uid))}" target="_blank" rel="noopener noreferrer">학생 리포트 바로 열기 ↗</a></p>`;}
 function nrEmailCard(r){
@@ -3898,7 +3903,7 @@ function nrEmailCard(r){
 }
 function nrRenderDrafts(){nrEl('nrPreview').innerHTML=nrDrafts.map(r=>`<section class="nr-panel"><h3>${escapeHTML(r.studentName||'학생')}</h3>${nrLinkMarkup(r.studentId)}${nrRender(r)}${nrEmailCard(r)}</section>`).join('');}
 function nrEmailDraft(report){
- const link=nrLink(report.studentId), name=report.studentName||'학생', date=report.date;
+ const link=nrLink(report.studentId,report.date,report.mealType||nrMealType()), name=report.studentName||'학생', date=report.date;
  return {subject:`[급식 영양리포트] ${name} · ${date}`,text:`안녕하세요.\n\n${name} 학생의 ${date} 영양리포트가 준비되었습니다.\n아래 링크에서 확인해 주세요.\n\n${link}\n\n본 메일은 관리자 확인 후 발송되었습니다.`,html:`<p>안녕하세요.</p><p><strong>${escapeHTML(name)} 학생의 ${escapeHTML(date)} 영양리포트</strong>가 준비되었습니다.</p><p><a href="${escapeHTML(link)}">영양리포트 확인하기</a></p><p style="color:#667085;font-size:13px">본 메일은 관리자 확인 후 발송되었습니다.</p>`,link};
 }
 function nrFindReport(uid){return nrDrafts.find(r=>r.studentId===uid)||(nrDraft?.studentId===uid?nrDraft:null);}
