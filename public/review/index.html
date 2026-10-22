@@ -983,7 +983,7 @@ body {
         class="user-sub"
         id="barSub"
       >
-        얼굴을 카메라 정면에 맞춰주세요
+        얼굴을 비추면 자동으로 로그인합니다
       </div>
 
     </div>
@@ -1092,7 +1092,7 @@ body {
         class="btn-capture"
         id="btnCapture"
       >
-        🙂 얼굴로 로그인
+        🙂 지금 다시 확인
       </button>
 
 
@@ -1794,7 +1794,39 @@ async function loadFaceModels() {
 }
 
 
-async function captureFaceLogin() {
+
+let reviewFaceTimer = null, reviewFaceGeneration = 0, reviewFaceBusy = false;
+function canReviewFace() {
+  return !currentStudent && !$("ocrCard").classList.contains("hidden") && !document.hidden;
+}
+function stopReviewAutoFace() {
+  reviewFaceGeneration++;
+  clearTimeout(reviewFaceTimer);
+  reviewFaceTimer = null;
+}
+function startReviewAutoFace() {
+  clearTimeout(reviewFaceTimer);
+  const generation = reviewFaceGeneration;
+  const scan = async () => {
+    if (generation !== reviewFaceGeneration || !canReviewFace()) return;
+    if (faceModelsReady && recogStream && $("videoRecog").videoWidth && !reviewFaceBusy) await captureFaceLogin(true);
+    if (generation === reviewFaceGeneration && canReviewFace()) reviewFaceTimer = setTimeout(scan, 450);
+  };
+  reviewFaceTimer = setTimeout(scan, 0);
+}
+window.addEventListener("pagehide", stopRecogCamera);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) stopRecogCamera();
+  else if (canReviewFace()) initRecognition();
+});
+
+async function captureFaceLogin(automatic = false) {
+  automatic = automatic === true;
+  if (reviewFaceBusy || !canReviewFace()) return;
+  if (!recogStream) { await initRecognition(); return; }
+  const generation = reviewFaceGeneration;
+  const current = () => generation === reviewFaceGeneration && canReviewFace();
+  reviewFaceBusy = true;
 
   const video = $("videoRecog");
   const button = $("btnCapture");
@@ -1809,6 +1841,7 @@ async function captureFaceLogin() {
       await loadFaceModels();
     }
 
+    if (!current()) return;
     if (!video.videoWidth) {
       throw new Error("카메라 준비를 기다려주세요.");
     }
@@ -1825,6 +1858,11 @@ async function captureFaceLogin() {
         .withFaceLandmarks()
         .withFaceDescriptors();
 
+    if (!current()) return;
+    if (automatic && detections.length !== 1) {
+      setOcrStatus("loading", detections.length ? "한 사람만 카메라에 나오게 해주세요." : "얼굴을 비추면 자동으로 로그인합니다.");
+      return;
+    }
     if (detections.length === 0) {
       throw new Error("얼굴을 찾지 못했습니다. 정면을 바라봐주세요.");
     }
@@ -1834,6 +1872,7 @@ async function captureFaceLogin() {
     }
 
     const snapshot = await get(ref(db, "students"));
+    if (!current()) return;
     let best = null;
 
     if (snapshot.exists()) {
@@ -1842,7 +1881,7 @@ async function captureFaceLogin() {
 
         const saved = student?.faceDescriptor;
 
-        if (!Array.isArray(saved) || saved.length !== 128) {
+        if (!Array.isArray(saved) || saved.length !== 128 || !saved.every(v => Number.isFinite(Number(v)))) {
           return;
         }
 
@@ -1851,7 +1890,7 @@ async function captureFaceLogin() {
           new Float32Array(saved.map(Number))
         );
 
-        if (!best || distance < best.distance) {
+        if (Number.isFinite(distance) && (!best || distance < best.distance)) {
 
           best = {
             distance,
@@ -1878,7 +1917,7 @@ async function captureFaceLogin() {
     }
 
     currentStudent = best;
-    sessionStorage.setItem("reviewStudent", JSON.stringify(best));
+    try { sessionStorage.setItem("reviewStudent", JSON.stringify(best)); } catch {}
     $("ocrResultName").textContent = best.name;
     $("ocrResultBox").classList.add("visible");
     setOcrStatus("hidden");
@@ -1888,17 +1927,24 @@ async function captureFaceLogin() {
     );
     updateUserBar(best);
     stopRecogCamera();
-    setTimeout(showReviewApp, 500);
+    const acceptedGeneration = reviewFaceGeneration;
+    setTimeout(() => { if (acceptedGeneration === reviewFaceGeneration && currentStudent?.uid === best.uid) showReviewApp(); }, 500);
 
   } catch (error) {
 
-    console.error("얼굴 로그인 실패", error);
+    if (!current()) return;
+    if (!automatic) console.error("얼굴 로그인 실패", error);
+    $("manualInputWrap").classList.add("visible");
     setOcrStatus("hidden");
     setFirebaseStatus("error", error.message || "얼굴 식별에 실패했습니다.");
     button.disabled = false;
     button.textContent = "🙂 다시 얼굴 인식";
     button.onclick = captureFaceLogin;
 
+  } finally {
+    reviewFaceBusy = false;
+    button.disabled = false;
+    button.textContent = "🙂 지금 다시 확인";
   }
 
 }
@@ -1909,93 +1955,40 @@ async function captureFaceLogin() {
 ===================================================== */
 
 async function initRecognition() {
-
-  const video =
-    $("videoRecog");
-
-
+  if (!canReviewFace()) return;
+  stopRecogCamera();
+  const generation = reviewFaceGeneration;
+  const video = $("videoRecog");
+  let stream = null;
   try {
-
-    if (
-      !navigator.mediaDevices ||
-      !navigator.mediaDevices.getUserMedia
-    ) {
-
-      setFirebaseStatus(
-        "error",
-        "이 브라우저에서는 카메라를 사용할 수 없습니다."
-      );
-
-      return;
-
-    }
-
-
-    recogStream =
-      await navigator.mediaDevices.getUserMedia({
-
-        video: {
-
-          facingMode: "user",
-
-          width: {
-            ideal: 1280
-          },
-
-          height: {
-            ideal: 720
-          }
-
-        }
-
-      });
-
-
-    video.srcObject =
-      recogStream;
-
-
-  } catch (error) {
-
-    console.error(
-      "카메라 오류:",
-      error
-    );
-
-
     try {
-
-      recogStream =
-        await navigator.mediaDevices.getUserMedia({
-
-          video: true
-
-        });
-
-
-      video.srcObject =
-        recogStream;
-
-
-    } catch (error2) {
-
-      console.error(
-        error2
-      );
-
-      setFirebaseStatus(
-        "error",
-        "카메라 권한을 허용해주세요."
-      );
-
+      stream = await navigator.mediaDevices.getUserMedia({video: {facingMode: "user", width: {ideal: 1280}, height: {ideal: 720}}, audio: false});
+    } catch (error) {
+      if (generation !== reviewFaceGeneration || !canReviewFace()) return;
+      stream = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
     }
-
+    if (generation !== reviewFaceGeneration || !canReviewFace()) {
+      stream.getTracks().forEach(track => track.stop()); return;
+    }
+    recogStream = stream;
+    video.srcObject = stream;
+    await video.play();
+    if (generation !== reviewFaceGeneration || !canReviewFace()) return;
+    setOcrStatus("loading", "얼굴을 비추면 자동으로 로그인합니다.");
+    startReviewAutoFace();
+  } catch (error) {
+    if (generation !== reviewFaceGeneration) return;
+    stopRecogCamera();
+    setOcrStatus("hidden");
+    $("manualInputWrap").classList.add("visible");
+    setFirebaseStatus("error", "카메라 권한을 허용한 뒤 지금 다시 확인을 눌러 주세요. 이름 입력도 사용할 수 있습니다.");
   }
-
 }
 
-
 function stopRecogCamera() {
+
+  stopReviewAutoFace();
+  $("videoRecog").srcObject = null;
 
   if (!recogStream) {
     return;
@@ -2079,6 +2072,7 @@ function setFirebaseStatus(
 
   el.className =
     "firebase-status";
+  el.style.display = "";
 
 
   if (state === "hidden") {
@@ -2642,9 +2636,12 @@ async function manualSearch() {
   }
 
 
-  await handleNameFound(
-    name
-  );
+  stopReviewAutoFace();
+  try {
+    await handleNameFound(name);
+  } finally {
+    if (canReviewFace()) startReviewAutoFace();
+  }
 
 }
 
@@ -2695,6 +2692,8 @@ function updateUserBar(
 ===================================================== */
 
 function showReviewApp() {
+
+  stopRecogCamera();
 
   $("ocrCard")
     .classList
@@ -3893,7 +3892,7 @@ $("logoutButton")
 
       $("barSub")
         .textContent =
-        "얼굴을 카메라 정면에 맞춰주세요";
+        "얼굴을 비추면 자동으로 로그인합니다";
 
 
       $("btnCapture")
@@ -3903,7 +3902,7 @@ $("logoutButton")
 
       $("btnCapture")
         .textContent =
-        "🙂 얼굴로 로그인";
+        "🙂 지금 다시 확인";
 
 
       $("btnCapture")
