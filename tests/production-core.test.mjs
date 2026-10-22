@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {koreaDate, validDate, orderPath, collectOrders, summarize, preparation, DEFAULT_PLAN, menuName, toCsv} from '../public/production/production-core.mjs';
+import {koreaDate, validDate, orderPath, collectOrders, summarize, menuName, toCsv} from '../public/production/production-core.mjs';
 
 const date = '2026-10-22';
 const row = (foods, extra = {}) => ({date, status:'pending', grade:1, classNum:2, foods, ...extra});
@@ -44,16 +44,6 @@ test('unknown class rows stay visible, sorted last, and class sums equal top-lev
   const s=summarize(rows); assert.equal(s.classes.at(-1).grade,null); assert.equal(s.classes[0].classNum,1);
   assert.equal(summarize(rows,'unknown').students,1);
   for (const key of ['밥','국','김치']) assert.equal(s.classes.reduce((n,c)=>n+c.foods[key],0),s.foods[key].total);
-});
-
-test('preparation uses per-food demand, additional onsite people and rounded buffer, never changes DB keys', () => {
-  const s = summarize(collectOrders({a:row({'밥':2,'국':1,'김치':0})},date,'lunch').rows);
-  const p = preparation(s,{onsite:3,buffer:10,grams:{'밥':200,'국':250,'김치':100}});
-  assert.deepEqual(p.map(f=>f.target),[6,5,4]); assert.deepEqual(p.map(f=>f.kg),[1.2,1.25,.4]);
-  assert.equal(p[2].label,'반찬'); assert.equal(p[2].key,'김치');
-  assert.equal(preparation(s,DEFAULT_PLAN)[0].target,2);
-  assert.throws(()=>preparation(s,{...DEFAULT_PLAN,onsite:-1})); assert.throws(()=>preparation(s,{...DEFAULT_PLAN,buffer:''}));
-  assert.throws(()=>preparation(s,{...DEFAULT_PLAN,grams:{'밥':0,'국':225,'김치':110}}));
 });
 
 test('historical/future plans never label a different date with the current menu', () => {

@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#211c36">
   <title>급식 준비 현황 · Smart Cafeteria</title>
-  <link rel="stylesheet" href="production.css">
+  <link rel="stylesheet" href="production.css?v=2">
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" defer></script>
-  <script type="module" src="production.mjs"></script>
+  <script type="module" src="production.mjs?v=2"></script>
 </head>
 <body>
   <header class="topbar"><div class="topbar-inner">
@@ -41,23 +41,9 @@
           <p class="section-note">배식 완료분을 포함한 전체 주문량입니다. 1회는 한 번의 배식이며, 학생 수와 다를 수 있습니다.</p>
           <div id="menu-cards" class="menu-cards"><p class="empty">선주문을 불러오는 중입니다.</p></div>
         </section>
-        <section class="panel preparation" aria-labelledby="prep-title"><div class="section-head"><div><p class="eyebrow">02 · PREPARATION</p><h2 id="prep-title">예상 준비량</h2></div><span class="tag lavender">조리 후 중량</span></div>
-          <p class="section-note" id="formula">(선주문 횟수 + 현장 예상 인원 × 메뉴별 1회) + 여유분</p>
-          <div id="prep-cards" class="prep-cards"><p class="empty">조회 후 계산됩니다.</p></div>
-          <div class="prep-total"><span>전체 준비 중량</span><strong id="total-kg">—</strong><small>식재료 발주량이 아닌, 입력한 배식 중량 기준 추정치</small></div>
-        </section>
       </div>
-      <aside class="panel calculator" aria-labelledby="calc-title"><div class="section-head"><div><p class="eyebrow">PLAN SETTINGS</p><h2 id="calc-title">준비량 계산</h2></div><span aria-hidden="true" class="calc-icon">＋</span></div>
-        <p class="section-note">조회한 학년 범위에 맞춰 입력하세요.</p>
-        <form id="plan-form">
-          <label class="field">추가 현장 예상 인원<div class="input-unit"><input id="onsite" type="number" min="0" max="100000" step="1" value="0" required><span>명</span></div></label>
-          <p class="field-help">선주문하지 않은 학생만 입력합니다. 밥·국·반찬을 각각 1회 받는 것으로 계산합니다.</p>
-          <label class="field">여유분<div class="input-unit"><input id="buffer" type="number" min="0" max="50" step="0.1" value="0" required><span>%</span></div></label>
-        </form>
-        <p class="calc-footnote">준비량은 메뉴별로 올림합니다.<br>취소된 신청과 0회 신청은 제외합니다.</p>
-      </aside>
     </section>
-    <section class="panel class-section" aria-labelledby="class-title"><div class="section-head"><div><p class="eyebrow">03 · BY CLASS</p><h2 id="class-title">학년·반별 주문 현황</h2></div><span id="class-count" class="tag">—</span></div>
+    <section class="panel class-section" aria-labelledby="class-title"><div class="section-head"><div><p class="eyebrow">02 · BY CLASS</p><h2 id="class-title">학년·반별 주문 현황</h2></div><span id="class-count" class="tag">—</span></div>
       <div class="table-scroll"><table><caption class="sr-only">학년과 반별 신청 인원, 배식 상태 및 메뉴별 주문 횟수</caption><thead><tr><th scope="col">학년 / 반</th><th scope="col">신청 인원</th><th scope="col">배식 대기</th><th scope="col">배식 완료</th><th scope="col">밥</th><th scope="col">국</th><th scope="col">반찬</th></tr></thead><tbody id="classes"><tr><td colspan="7" class="empty">선주문을 불러오는 중입니다.</td></tr></tbody></table></div>
       <p id="exclusions" class="section-note"></p>
     </section>

@@ -75,28 +75,6 @@ export function summarize(rows, grade = 'all') {
   return result;
 }
 
-export const DEFAULT_PLAN = Object.freeze({onsite: 0, buffer: 0, grams: {'밥': 225, '국': 225, '김치': 110}});
-
-export function validatePlan(raw) {
-  const onsite = integer(raw.onsite, 0, 100000), buffer = Number(raw.buffer);
-  if (onsite === null) throw Error('현장 예상 인원은 0~100,000명 사이의 정수로 입력하세요.');
-  if (!['number', 'string'].includes(typeof raw.buffer) || String(raw.buffer).trim() === '' || !Number.isFinite(buffer) || buffer < 0 || buffer > 50)
-    throw Error('여유분은 0~50%로 입력하세요.');
-  const grams = Object.fromEntries(FOODS.map(({key}) => [key, Number(raw.grams?.[key])]));
-  if (FOODS.some(({key}) => !['number', 'string'].includes(typeof raw.grams?.[key]) || !Number.isFinite(grams[key]) || grams[key] < 1 || grams[key] > 5000))
-    throw Error('1회 중량은 1~5,000g으로 입력하세요.');
-  return {onsite, buffer, grams};
-}
-
-export function preparation(summary, input) {
-  const plan = validatePlan(input);
-  return FOODS.map(f => {
-    const ordered = summary.foods[f.key].total, base = ordered + plan.onsite;
-    const target = Math.ceil(base * (1 + plan.buffer / 100) - 1e-9);
-    return {...f, ordered, onsite: plan.onsite, extra: target - base, target, grams: plan.grams[f.key], kg: target * plan.grams[f.key] / 1000};
-  });
-}
-
 export function menuName(food, current, date, meal, today) {
   if (food.names.length) return {name: food.names.join(' / '), source: '신청 당시 메뉴', mixed: food.names.length > 1};
   const key = Object.keys(current || {}).find(k => k === food.key);
