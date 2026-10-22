@@ -22,3 +22,17 @@ let blocked; blocked = new Session({ write: async () => { blocked.fail('disconne
 await assert.rejects(blocked.send([1, 1, 1], {})); assert.equal(blocked.state, 'error');
 await assert.rejects(new Session({ write() {} }).send([1, NaN, 1], {}));
 console.log('PASS ordered separate writes, frozen student/counts, zero quantities, serialized writes, duplicate submit, exact Korean messages, fragmented UTF-8, start-before-complete, duplicate replies, partial write/disconnect, early notifications, invalid counts.');
+
+// The supplied Arduino sketch emits these exact messages, with Serial.println CRLF.
+let legacyCompletions = 0;
+const legacy = new Session({ write: async () => {}, change: state => { if (state === 'complete') legacyCompletions++; } });
+await legacy.send([2, 3, 1], { uid: 'legacy' });
+legacy.receive('System Initializing...\r\n자동 시퀀스 종료. 대기 중...\r\n');
+assert.equal(legacy.state, 'waiting');
+const started = encoder.encode('물체 감지됨: 자동 시퀀스 시작\r\n');
+for (let i = 0; i < started.length; i++) legacy.receive(started.subarray(i, i + 1));
+assert.equal(legacy.state, 'serving');
+legacy.receive('자동 시퀀스 종료. 대기 중...\r\n');
+assert.equal(legacy.state, 'complete');
+legacy.receive('자동 시퀀스 종료. 대기 중...\r\n'); assert.equal(legacyCompletions, 1);
+console.log('PASS supplied Arduino sketch start/end strings, CRLF and split UTF-8; startup and out-of-order completion ignored.');
