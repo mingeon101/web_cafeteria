@@ -53,9 +53,6 @@
           <label class="field">추가 현장 예상 인원<div class="input-unit"><input id="onsite" type="number" min="0" max="100000" step="1" value="0" required><span>명</span></div></label>
           <p class="field-help">선주문하지 않은 학생만 입력합니다. 밥·국·반찬을 각각 1회 받는 것으로 계산합니다.</p>
           <label class="field">여유분<div class="input-unit"><input id="buffer" type="number" min="0" max="50" step="0.1" value="0" required><span>%</span></div></label>
-          <div class="divider"></div><h3>한 번 배식하는 중량</h3><p class="field-help">실제 배식량에 맞춰 수정하세요. 아래 값은 계산을 위한 초기값입니다.</p>
-          <div class="weight-fields"><label class="field">밥<div class="input-unit"><input id="grams-rice" type="number" min="1" max="5000" step="0.1" value="225" required><span>g</span></div></label><label class="field">국<div class="input-unit"><input id="grams-soup" type="number" min="1" max="5000" step="0.1" value="225" required><span>g</span></div></label><label class="field">반찬<div class="input-unit"><input id="grams-side" type="number" min="1" max="5000" step="0.1" value="110" required><span>g</span></div></label></div>
-          <button type="submit" class="button primary">준비량 적용하기</button><p id="plan-message" class="field-help" role="status">중량·여유분은 이 기기에 기억됩니다. 현장 인원은 날짜·급식·학년별로 따로 기억됩니다.</p>
         </form>
         <p class="calc-footnote">준비량은 메뉴별로 올림합니다.<br>취소된 신청과 0회 신청은 제외합니다.</p>
       </aside>
