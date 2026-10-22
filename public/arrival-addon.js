@@ -38,7 +38,7 @@
    visit=result;badge();get('arrival-heading').textContent=visit.source==='reservation'?'예약한 좌석으로 안내할게요':'빈 좌석을 자동 배정했어요';get('arrival-seat').textContent=visit.label;
    const slot=transaction.snapshot.val().meta.slots[visit.slotId];get('arrival-detail').textContent=`${date} · ${slot.label}`;
    if(todayPreorder?.status==='fulfilled'){message('이미 처리된 선주문입니다. 좌석만 안내하고 배식을 다시 등록하지 않습니다.');return;}
-   get('arrival-continue').hidden=false;let remaining=4;message(`${remaining}초 후 ${todayPreorder?'선주문으로 바로 배식을 진행':'기존 배식 수량 선택 화면으로 이동'}합니다.`);
+   get('arrival-continue').hidden=false;let remaining=2;message(`${remaining}초 후 ${todayPreorder?'선주문으로 바로 배식을 진행':'기존 배식 수량 선택 화면으로 이동'}합니다.`);
    timer=setInterval(()=>{if(current!==token||user?.uid!==student.uid||!systemOperating){stop();return;}remaining--;if(remaining<=0){stop();proceed();}else message(`${remaining}초 후 배식 절차로 이동합니다.`);},1000);
   }catch(e){if(current===token){get('arrival-heading').textContent='좌석 안내를 확인해 주세요';get('arrival-seat').textContent='확인 필요';message(e.message,true);get('arrival-retry').hidden=false;}}
   finally{if(current===token)busy=false;}

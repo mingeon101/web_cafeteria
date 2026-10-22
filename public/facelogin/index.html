@@ -858,9 +858,9 @@ root.MealIntegration={reservation,sharedWindow};
 
       <button
         class="student-card-button"
-        onclick="toggleOCRPanel()"
+        onclick="openStudentCardMode()"
       >
-        얼굴<br>식별
+        학생증<br>인식
       </button>
 
       <div class="student-input-area">
@@ -945,13 +945,14 @@ root.MealIntegration={reservation,sharedWindow};
         </div>
 
         <div class="ocr-button-row">
+          <button class="small-action primary" id="ocr-capture-button" onclick="captureStudentCard()" hidden>학생증 촬영</button>
 
           <button
             class="small-action primary"
             id="face-recognize-button"
-            onclick="recognizeFace()"
+            onclick="resumeFaceRecognition()"
           >
-            얼굴 식별
+            얼굴 자동 인식 다시 시작
           </button>
 
           <button
@@ -964,7 +965,7 @@ root.MealIntegration={reservation,sharedWindow};
         </div>
 
         <p class="face-notice">
-          관리자가 미리 등록한 얼굴 특징 데이터와 비교해 학생을 식별합니다.
+          얼굴을 비추면 등록된 학생을 자동으로 확인합니다.
         </p>
 
         <canvas
@@ -1279,6 +1280,37 @@ let systemOperating = true;
 let lastStopReason = null;
 
 let recognitionStream = null;
+let faceLoginBusy = false;
+let studentRecognitionMode = "face";
+let cardRecognitionBusy = false;
+
+    let autoFaceTimer = null;
+    let faceRecognitionGeneration = 0;
+    function faceRecognitionActive() {
+      return systemOperating && document.getElementById("page-recognition").classList.contains("active");
+    }
+    function stopAutoFaceRecognition() {
+      faceRecognitionGeneration++;
+      clearTimeout(autoFaceTimer);
+      autoFaceTimer = null;
+    }
+    function startAutoFaceRecognition() {
+      clearTimeout(autoFaceTimer);
+      const generation = faceRecognitionGeneration;
+      const scan = async () => {
+        if (generation !== faceRecognitionGeneration || !faceRecognitionActive() || studentRecognitionMode !== "face") return;
+        const video = document.getElementById("video-recognition");
+        if (faceModelsReady && recognitionStream && video.videoWidth && !faceLoginBusy) {
+          await recognizeFace(true);
+        }
+        if (generation === faceRecognitionGeneration && faceRecognitionActive()) {
+          autoFaceTimer = setTimeout(scan, 450);
+        }
+      };
+      autoFaceTimer = setTimeout(scan, 0);
+    }
+    window.addEventListener("pagehide", stopRecognitionCamera);
+
 
 
 
@@ -1351,6 +1383,13 @@ function goPage(name) {
   }
 
   target.classList.add("active");
+  if (name !== "recognition") stopRecognitionCamera();
+  else {
+    studentRecognitionMode = "face";
+    syncRecognitionMode();
+    document.getElementById("ocr-panel").classList.add("visible");
+    startRecognitionCamera();
+  }
 
   window.scrollTo({
     top: 0,
@@ -1799,6 +1838,7 @@ async function searchStudentByInfo() {
       "student-search-button"
     );
 
+  stopRecognitionCamera();
   button.disabled = true;
   button.textContent =
     "조회 중...";
@@ -2003,6 +2043,28 @@ async function lookupStudentByName(
    학생증 OCR 패널
 ============================================================ */
 
+
+function syncRecognitionMode() {
+  document.getElementById("ocr-capture-button").hidden = studentRecognitionMode !== "card";
+  document.getElementById("face-recognize-button").textContent = studentRecognitionMode === "card" ? "얼굴 자동 인식으로 돌아가기" : "얼굴 자동 인식 다시 시작";
+}
+async function openStudentCardMode() {
+  if (!systemOperating || !faceRecognitionActive()) return;
+  studentRecognitionMode = "card";
+  stopAutoFaceRecognition();
+  syncRecognitionMode();
+  document.getElementById("ocr-panel").classList.add("visible");
+  setStudentStatus("loading", "학생증을 비추고 학생증 촬영을 누르면 Gemini로 인식합니다.");
+  if (!recognitionStream) await startRecognitionCamera();
+}
+async function resumeFaceRecognition() {
+  if (!systemOperating || !faceRecognitionActive()) return;
+  studentRecognitionMode = "face";
+  syncRecognitionMode();
+  if (!faceModelsReady) await loadFaceModels();
+  if (faceRecognitionActive()) await startRecognitionCamera();
+}
+
 async function toggleOCRPanel() {
 
   const panel =
@@ -2050,88 +2112,36 @@ function closeOCRPanel() {
 
 
 async function startRecognitionCamera() {
-
-  if (!systemOperating) {
-    return;
-  }
-
-
+  if (!faceRecognitionActive()) return;
   stopRecognitionCamera();
-
-
-  const video =
-    document.getElementById(
-      "video-recognition"
-    );
-
-
+  const generation = faceRecognitionGeneration;
+  const video = document.getElementById("video-recognition");
+  let stream = null;
   try {
-
-    recognitionStream =
-      await navigator
-        .mediaDevices
-        .getUserMedia({
-
-          video: {
-
-            facingMode: {
-              ideal:
-                "user"
-            },
-
-            width: {
-              ideal: 1280
-            },
-
-            height: {
-              ideal: 720
-            }
-
-          }
-
-        });
-
-
-    video.srcObject =
-      recognitionStream;
-
-
-  } catch (err) {
-
-    console.warn(
-      "후면 카메라 실패:",
-      err
-    );
-
-
     try {
-
-      recognitionStream =
-        await navigator
-          .mediaDevices
-          .getUserMedia({
-            video: true
-          });
-
-      video.srcObject =
-        recognitionStream;
-
-    } catch (err2) {
-
-      setStudentStatus(
-        "error",
-        "카메라를 사용할 수 없습니다."
-      );
-
+      stream = await navigator.mediaDevices.getUserMedia({video: {facingMode: {ideal: "user"}, width: {ideal: 1280}, height: {ideal: 720}}, audio: false});
+    } catch (error) {
+      if (generation !== faceRecognitionGeneration || !faceRecognitionActive()) return;
+      stream = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
     }
-
+    if (generation !== faceRecognitionGeneration || !faceRecognitionActive()) {
+      stream.getTracks().forEach(track => track.stop()); return;
+    }
+    recognitionStream = stream; video.srcObject = stream;
+    await video.play();
+    if (generation !== faceRecognitionGeneration || !faceRecognitionActive()) return;
+    setStudentStatus("loading", studentRecognitionMode === "card" ? "학생증을 카메라에 비추고 학생증 촬영을 누르세요." : "얼굴을 비추면 자동으로 학생을 확인합니다.");
+    startAutoFaceRecognition();
+  } catch (error) {
+    if (generation !== faceRecognitionGeneration) return;
+    stopRecognitionCamera();
+    setStudentStatus("error", "카메라를 사용할 수 없습니다. 얼굴인식 버튼으로 다시 연결하거나 학년·반·번호를 입력하세요.");
   }
-
 }
 
-
-
 function stopRecognitionCamera() {
+
+  stopAutoFaceRecognition();
 
   if (
     recognitionStream
@@ -2170,266 +2180,64 @@ function stopRecognitionCamera() {
    OCR 실행
 ============================================================ */
 
+
 async function captureStudentCard() {
-
-  if (
-    !GEMINI_API_KEY
-  ) {
-
-    setStudentStatus(
-      "error",
-      "OCR API 키를 불러오지 못했습니다."
-    );
-
-    return;
-
+  if (!systemOperating || !faceRecognitionActive() || studentRecognitionMode !== "card" || cardRecognitionBusy) return;
+  const video = document.getElementById("video-recognition");
+  if (!video.videoWidth) {
+    setStudentStatus("error", "카메라 준비를 기다려주세요."); return;
   }
-
-
-  const video =
-    document.getElementById(
-      "video-recognition"
-    );
-
-  const canvas =
-    document.getElementById(
-      "ocr-canvas"
-    );
-
-  const button =
-    document.getElementById(
-      "ocr-capture-button"
-    );
-
-
-  if (
-    !video.videoWidth
-  ) {
-
-    setStudentStatus(
-      "error",
-      "카메라 준비를 기다려주세요."
-    );
-
-    return;
-
-  }
-
-
+  stopAutoFaceRecognition();
+  const generation = faceRecognitionGeneration;
+  const current = () => generation === faceRecognitionGeneration && faceRecognitionActive() && studentRecognitionMode === "card";
+  const button = document.getElementById("ocr-capture-button");
+  cardRecognitionBusy = true;
   button.disabled = true;
-  button.textContent =
-    "인식 중...";
-
-  setStudentStatus(
-    "loading",
-    "학생증에서 이름을 인식하고 있습니다..."
-  );
-
-
-  canvas.width =
-    video.videoWidth;
-
-  canvas.height =
-    video.videoHeight;
-
-
-  const ctx =
-    canvas.getContext("2d");
-
-
-  ctx.drawImage(
-    video,
-    0,
-    0,
-    canvas.width,
-    canvas.height
-  );
-
-
-  const imageBase64 =
-    canvas
-      .toDataURL(
-        "image/jpeg",
-        0.9
-      )
-      .split(",")[1];
-
-
+  button.textContent = "인식 중...";
+  setStudentStatus("loading", "Gemini로 학생증의 이름을 확인하고 있습니다...");
   try {
-
-    const response =
-      await fetch(
-        GEMINI_ENDPOINT,
-        {
-
-          method: "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json"
-          },
-
-          body:
-            JSON.stringify({
-
-              contents: [
-                {
-
-                  parts: [
-
-                    {
-                      text:
-                        "이 학생증 또는 명찰 이미지에서 학생의 사람 이름만 읽어주세요. 이름만 답하세요. 읽을 수 없다면 NONE이라고 답하세요."
-                    },
-
-                    {
-                      inline_data: {
-                        mime_type:
-                          "image/jpeg",
-
-                        data:
-                          imageBase64
-                      }
-                    }
-
-                  ]
-
-                }
-              ],
-
-              generationConfig: {
-                temperature: 0.1
-              }
-
-            })
-
-        }
-      );
-
-
-    const data =
-      await response.json();
-
-
-    if (!response.ok) {
-
-      throw new Error(
-        data.error?.message ||
-        "OCR 요청 실패"
-      );
-
-    }
-
-
-    const rawName =
-      (
-        data
-          ?.candidates?.[0]
-          ?.content
-          ?.parts?.[0]
-          ?.text || ""
-      )
-        .trim()
-        .replace(
-          /[`"'*.]/g,
-          ""
-        );
-
-
-    if (
-      !rawName ||
-      rawName === "NONE"
-    ) {
-
-      setStudentStatus(
-        "error",
-        "학생 이름을 인식하지 못했습니다."
-      );
-
-      return;
-
-    }
-
-
-    const student =
-      await lookupStudentByName(
-        rawName
-      );
-
-
-    if (!student) {
-
-      setStudentStatus(
-        "error",
-        `"${rawName}" 학생을 찾지 못했습니다.`
-      );
-
-      return;
-
-    }
-
-
+    if (!GEMINI_API_KEY) await initGeminiKey();
+    if (!current()) return;
+    if (!GEMINI_API_KEY) throw Error("OCR API 키를 불러오지 못했습니다. 다시 촬영해 주세요.");
+    const canvas = document.getElementById("ocr-canvas");
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imageBase64 = canvas.toDataURL("image/jpeg", 0.9).split(",")[1];
+    const response = await fetch(GEMINI_ENDPOINT, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        contents: [{parts: [
+          {text: "이 학생증 또는 명찰 이미지에서 학생의 사람 이름만 읽어주세요. 이름만 답하세요. 읽을 수 없다면 NONE이라고 답하세요."},
+          {inline_data: {mime_type: "image/jpeg", data: imageBase64}}
+        ]}],
+        generationConfig: {temperature: 0.1}
+      })
+    });
+    if (!current()) return;
+    const data = await response.json();
+    if (!current()) return;
+    if (!response.ok) throw Error(data.error?.message || "OCR 요청 실패");
+    const rawName = (data?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim().replace(/[`"'*.]/g, "");
+    if (!rawName || rawName === "NONE") throw Error("학생 이름을 인식하지 못했습니다.");
+    const student = await lookupStudentByName(rawName);
+    if (!current()) return;
+    if (!student) throw Error("학생증에 해당하는 등록 학생을 찾지 못했습니다.");
     user = student;
-
-
-    document
-      .getElementById(
-        "input-grade"
-      )
-      .value =
-      user.grade || "";
-
-    document
-      .getElementById(
-        "input-class"
-      )
-      .value =
-      user.classNum || "";
-
-    document
-      .getElementById(
-        "input-number"
-      )
-      .value =
-      user.number || "";
-
-
-    setStudentStatus(
-      "success",
-      `${user.name} 학생을 인식했습니다.`
-    );
-
-
-    await loadExistingPreorder();
-
+    document.getElementById("input-grade").value = user.grade || "";
+    document.getElementById("input-class").value = user.classNum || "";
+    document.getElementById("input-number").value = user.number || "";
+    setStudentStatus("success", `${user.name} 학생을 인식했습니다.`);
     closeOCRPanel();
-
     openStudentConfirm();
-
-
-  } catch (err) {
-
-    console.error(
-      "OCR 오류:",
-      err
-    );
-
-    setStudentStatus(
-      "error",
-      "학생증 인식에 실패했습니다."
-    );
-
+  } catch (error) {
+    if (current()) setStudentStatus("error", error.message || "학생증 인식에 실패했습니다.");
   } finally {
-
+    cardRecognitionBusy = false;
     button.disabled = false;
-    button.textContent =
-      "학생증 촬영";
-
+    button.textContent = "학생증 촬영";
   }
-
 }
-
-
 
 /* ============================================================
    학생 확인
@@ -3156,7 +2964,7 @@ async function loadFaceModels() {
 }
 
 
-async function getCameraFaceDescriptor() {
+async function getCameraFaceDescriptor(automatic = false) {
 
   if (!faceModelsReady) {
     throw new Error("얼굴 인식 모델이 아직 준비되지 않았습니다.");
@@ -3180,6 +2988,11 @@ async function getCameraFaceDescriptor() {
       )
       .withFaceLandmarks()
       .withFaceDescriptors();
+
+  if (automatic && detections.length !== 1) {
+    setStudentStatus("loading", detections.length ? "한 사람만 카메라에 나오게 해주세요." : "얼굴을 비추면 자동으로 확인합니다.");
+    return null;
+  }
 
   if (detections.length === 0) {
     throw new Error("얼굴을 찾지 못했습니다. 정면을 바라봐주세요.");
@@ -3246,7 +3059,12 @@ async function findEnteredStudent() {
 }
 
 
-async function recognizeFace() {
+async function recognizeFace(automatic = false) {
+  automatic = automatic === true;
+  const generation = faceRecognitionGeneration;
+  const current = () => generation === faceRecognitionGeneration && faceRecognitionActive() && studentRecognitionMode === "face";
+  if (faceLoginBusy || !current()) return;
+  faceLoginBusy = true;
 
   const button =
     document.getElementById("face-recognize-button");
@@ -3260,8 +3078,10 @@ async function recognizeFace() {
 
   try {
 
-    const descriptor = await getCameraFaceDescriptor();
+    const descriptor = await getCameraFaceDescriptor(automatic);
+    if (!current() || !descriptor) return;
     const snapshot = await db.ref("students").once("value");
+    if (!current()) return;
 
     let best = null;
 
@@ -3307,17 +3127,18 @@ async function recognizeFace() {
       `${user.name} 학생으로 식별했습니다.`
     );
 
-    await loadExistingPreorder();
     closeOCRPanel();
     openStudentConfirm();
 
   } catch (err) {
 
-    console.error("얼굴 식별 실패:", err);
+    if (!current()) return;
+    if (!automatic) console.error("얼굴 식별 실패:", err);
     setStudentStatus("error", err.message || "얼굴 식별에 실패했습니다.");
 
   } finally {
 
+    faceLoginBusy = false;
     button.disabled = false;
 
   }
@@ -3332,6 +3153,10 @@ async function recognizeFace() {
 (async function init() {
 
   await loadFaceModels();
+  if (faceRecognitionActive()) {
+    document.getElementById("ocr-panel").classList.add("visible");
+    startRecognitionCamera();
+  }
 
   renderTodayMenu();
   renderAllergies();
