@@ -5,6 +5,12 @@
   const pendingKey = 'cafeteria.serving.serial.pending.v1';
   let port, reader, writer, readTask, closing = false, connected = false, connecting = false, saving = false, journal = null, completing = false;
   let dbQueue = Promise.resolve();
+  let txSequence = 0, rxLogDecoder = new TextDecoder();
+  function btLog(event, data = {}, level = 'info') {
+    try { console[level](`[급식BT ${new Date().toISOString()}] ${event}`, data); } catch { /* Diagnostics never interrupt serving. */ }
+  }
+  const errorInfo = error => ({ name: error?.name || 'Error', message: error?.message || String(error) });
+  btLog('INIT', { serialSupported: !!navigator.serial, secureContext: window.isSecureContext });
   const panel = document.createElement('section'); panel.className = 'bt-panel';
   panel.innerHTML = `<div class="bt-toolbar"><b>배식 장치</b><span id="bt-status" role="status" aria-live="polite">연결 안 됨</span><button type="button" id="bt-connect">블루투스 연결</button><button type="button" id="bt-disconnect" disabled>연결 해제</button></div>
   <p>PC에서 HC-05 / HC-06을 먼저 페어링한 뒤, 연결 버튼을 눌러 해당 장치 또는 블루투스 COM 포트를 선택하세요.</p>
@@ -19,7 +25,7 @@
   try { journal = JSON.parse(localStorage.getItem(pendingKey) || 'null'); }
   catch { journal = { invalid: true }; }
   function locked() { return saving || completing || !!journal || session.active(); }
-  function report(message = '') { $bt('error').hidden = !message; $bt('error').textContent = message; }
+  function report(message = '') { if (message) btLog('NOTICE', { message }, 'warn'); $bt('error').hidden = !message; $bt('error').textContent = message; }
   function controls() {
     const busy = locked();
     $bt('connect').disabled = connecting || closing || connected || busy;
@@ -51,6 +57,7 @@
     controls();
   }
   async function complete(snapshot) {
+    btLog('FIREBASE_COMPLETE_SAVE_REQUEST');
     if (completing) return; completing = true; controls();
     try {
       persist({ snapshot, completed: true });
@@ -71,42 +78,52 @@
       localStorage.removeItem(pendingKey); journal = null;
       if (snapshot.preordered && user?.uid === snapshot.uid && todayPreorder) todayPreorder.status = 'fulfilled';
       $bt('save-retry').hidden = true; report();
+      btLog('FIREBASE_COMPLETE_SAVE_OK');
       goPage('complete');
-    } catch (error) { report('배식은 완료됐지만 기록 저장에 실패했습니다. 저장만 다시 시도해 주세요.'); $bt('save-retry').hidden = false; }
+    } catch (error) { btLog('FIREBASE_COMPLETE_SAVE_ERROR', { name: error.name }, 'error'); report('배식은 완료됐지만 기록 저장에 실패했습니다. 저장만 다시 시도해 주세요.'); $bt('save-retry').hidden = false; }
     finally { completing = false; controls(); }
   }
   const session = new CafeteriaBluetoothSession({
     write: async bytes => {
       if (!systemOperating) throw Error('급식 시스템 운영이 중지되어 전송을 멈췄습니다. 장치 상태를 확인해 주세요.');
       if (!connected || !writer) throw Error('블루투스 연결이 끊겼습니다.');
-      await writer.write(bytes);
+      const label = ['밥', '반찬', '국'][txSequence] || '추가 데이터';
+      const data = { order: txSequence + 1, food: label, text: JSON.stringify(new TextDecoder().decode(bytes)), bytes: Array.from(bytes) };
+      btLog('TX_REQUEST', data);
+      try { await writer.write(bytes); txSequence++; btLog('TX_WRITE_OK', { ...data, note: '브라우저 쓰기 완료 · 아두이노 수신 확인 응답은 아님' }); }
+      catch (error) { btLog('TX_ERROR', { ...data, ...errorInfo(error) }, 'error'); throw error; }
     },
     change(state, detail, snapshot) {
+      btLog('STATE', { state, detail: detail || '' });
       render(state, detail, snapshot);
       hardware(state, detail, snapshot);
       if (state === 'complete') void complete(snapshot);
     }
   });
-  function disconnected() { connected = false; session.fail('블루투스 연결이 끊겼습니다. 전송 여부를 장치에서 확인해 주세요.'); if (!locked()) $bt('status').textContent = '연결 안 됨'; controls(); void cleanup(); }
+  function disconnected() { btLog('DISCONNECTED', {}, 'warn'); connected = false; session.fail('블루투스 연결이 끊겼습니다. 전송 여부를 장치에서 확인해 주세요.'); if (!locked()) $bt('status').textContent = '연결 안 됨'; controls(); void cleanup(); }
   const onPortDisconnect = event => { if (event.target === port || event.port === port) disconnected(); };
   async function readResponses(activePort, activeReader) {
     try {
       while (connected && port === activePort) {
         const { value, done } = await activeReader.read();
-        if (done) { if (connected) disconnected(); break; }
-        if (value) session.receive(value);
+        if (done) { btLog('RX_STREAM_END', {}, 'warn'); if (connected) disconnected(); break; }
+        if (value) {
+          const text = rxLogDecoder.decode(value, { stream: true });
+          btLog('RX', { text: JSON.stringify(text), byteLength: value.length, hex: Array.from(value.slice(0, 256), b => b.toString(16).padStart(2, '0')).join(' '), state: session.state });
+          session.receive(value);
+        }
       }
-    } catch (error) { if (!closing) disconnected(); }
+    } catch (error) { btLog('RX_ERROR', errorInfo(error), 'error'); if (!closing) disconnected(); }
     finally { activeReader.releaseLock(); if (reader === activeReader) reader = null; }
   }
   async function cleanup() {
-    if (closing) return; closing = true; connected = false; controls();
+    if (closing) return; btLog('PORT_CLOSE_REQUEST'); closing = true; connected = false; controls();
     navigator.serial?.removeEventListener('disconnect', onPortDisconnect);
     try { if (reader) await reader.cancel(); } catch { /* Disconnected readers may already be closed. */ }
     try { await readTask; } catch { /* Read failure is shown separately. */ }
     try { if (writer) writer.releaseLock(); } catch { /* A failed write may have released its stream. */ }
     try { await port?.close(); } catch { /* A disconnected port may already be closed. */ }
-    port = reader = writer = readTask = null; closing = false; controls();
+    port = reader = writer = readTask = null; closing = false; btLog('PORT_CLOSED'); controls();
   }
   $bt('connect').addEventListener('click', async () => {
     if (locked() || connecting || closing || connected) return;
@@ -114,15 +131,20 @@
     if (!navigator.serial) { report('PC용 Chrome 또는 Edge에서 열어 주세요. 이 브라우저에서는 블루투스 시리얼 포트를 선택할 수 없습니다.'); return; }
     connecting = true; controls(); report();
     try {
+      btLog('PORT_CHOOSER_OPEN', { baudRate: config.baud });
       port = await navigator.serial.requestPort();
+      btLog('PORT_SELECTED', { info: port.getInfo?.() || {} });
       await port.open({ baudRate: config.baud, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' });
+      btLog('PORT_OPEN_OK', { baudRate: config.baud, readable: !!port.readable, writable: !!port.writable });
       if (!port.readable || !port.writable) throw Error('선택한 포트에서 송수신할 수 없습니다.');
       writer = port.writable.getWriter(); reader = port.readable.getReader();
       localStorage.setItem(settingsKey, JSON.stringify(config)); connected = true;
       navigator.serial.addEventListener('disconnect', onPortDisconnect);
+      rxLogDecoder = new TextDecoder();
       readTask = readResponses(port, reader);
+      btLog('RX_LISTENING');
       $bt('settings').open = false; $bt('status').textContent = '블루투스 시리얼 · 연결됨';
-    } catch (error) { await cleanup(); report(error.name === 'NotFoundError' ? '장치 선택을 취소했습니다. 다시 연결할 수 있습니다.' : '연결 실패: ' + error.message); }
+    } catch (error) { btLog('CONNECT_ERROR', errorInfo(error), 'error'); await cleanup(); report(error.name === 'NotFoundError' ? '장치 선택을 취소했습니다. 다시 연결할 수 있습니다.' : '연결 실패: ' + error.message); }
     finally { connecting = false; controls(); }
   });
   $bt('disconnect').addEventListener('click', async () => { if (!locked()) { await cleanup(); $bt('status').textContent = '연결 안 됨'; controls(); } });
@@ -139,6 +161,7 @@
     if (!connected || !writer) throw Error('화면 위의 ‘블루투스 연결’로 배식 장치를 먼저 연결해 주세요.');
     if (!systemOperating) throw Error('급식 시스템 운영이 중지되었습니다.');
     if (todayPreorder?.status === 'processing') throw Error('이미 전송 중이거나 확인이 필요한 선주문입니다. 관리자에게 확인해 주세요.');
+    btLog('SERVE_SUBMIT');
     saving = true; controls();
     let record;
     try {
@@ -150,14 +173,19 @@
       stopServeDetector(); stopProgressTimer(); cancelProgressEdit();
       document.getElementById('btn-progress-edit').hidden = true;
       document.getElementById('progress-edit-panel').classList.remove('show'); goPage('progress');
+      txSequence = 0;
+      btLog('SEND_COUNTS', { rice: snapshot.counts[0], side: snapshot.counts[2], soup: snapshot.counts[1], order: '밥 → 반찬 → 국' });
       await session.send(snapshot.counts, snapshot);
+      btLog('SEND_FINISHED', { state: session.state, note: '세 쓰기 완료 · 마지막 숫자는 parseInt 타임아웃으로 확정' });
     } catch (error) {
+      btLog('SERVE_SUBMIT_ERROR', { name: error.name, message: record ? error.message : '배식 기록 저장 실패 또는 미확정' }, 'error');
       if (!record) { report('저장 상태를 확인해야 합니다. 장치로 배식량은 전송하지 않았습니다.'); controls(); }
       throw error;
     } finally { saving = false; controls(); }
   }
   window.BluetoothServing = { submit, locked, receive: bytes => session.receive(bytes) };
   if (journal) {
+    btLog('RECOVERED_PENDING_JOB', { completed: !!journal.completed }, 'warn');
     $bt('status').textContent = '이전 작업 확인 필요';
     report('이전 작업이 남아 있습니다. 중복 전송을 막았습니다. 장치 상태를 확인한 뒤 작업을 종료해 주세요.');
     if (journal.completed && journal.snapshot) {
