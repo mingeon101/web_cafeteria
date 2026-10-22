@@ -2,6 +2,7 @@
 (function (root) {
   'use strict';
   const signals = new Map([
+    ['배식을 시작합니다', 'start'], ['배식을 완료했습니다', 'complete'],
     ['배식 시작', 'start'], ['물체 감지됨: 자동 시퀀스 시작', 'start'],
     ['배식 완료', 'complete'], ['자동 시퀀스 종료. 대기 중...', 'complete']
   ]);
@@ -12,7 +13,7 @@
     }
     active() { return ['sending', 'waiting', 'serving', 'error'].includes(this.state); }
     transition(state, detail = '') { this.state = state; this.change(state, detail, this.snapshot); }
-    async send(counts, context, labeled = false) {
+    async send(counts, context) {
       if (this.active()) throw Error('진행 중인 배식이 있습니다.');
       if (!Array.isArray(counts) || counts.length !== 3 || counts.some(n => !Number.isInteger(n) || n < 0 || n > 20)) throw Error('배식 횟수를 확인해 주세요.');
       this.snapshot = Object.freeze({ ...context, counts: Object.freeze([...counts]) });
@@ -22,7 +23,9 @@
       try {
         for (const [index, label] of [[0, '밥'], [2, '반찬'], [1, '국']]) {
           if (this.state !== 'sending') throw Error('연결이 끊겨 전송을 중단했습니다.');
-          await this.write(new TextEncoder().encode((labeled ? label + ':' : '') + counts[index] + '\n'));
+          // parseInt leaves a delimiter unread. Omit it on the third value so it
+          // cannot become a phantom zero at the next loop; parseInt ends on timeout.
+          await this.write(new TextEncoder().encode(String(counts[index]) + (index === 1 ? '' : '\n')));
           if (this.state !== 'sending') throw Error('전송 상태를 확인할 수 없습니다.');
           this.change('sending', label + ' ' + counts[index] + '회 전송됨', this.snapshot);
         }
