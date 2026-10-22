@@ -1,6 +1,10 @@
 /* Three ordered serial writes, followed by device-confirmed serving states. */
 (function (root) {
   'use strict';
+  const signals = new Map([
+    ['배식 시작', 'start'], ['물체 감지됨: 자동 시퀀스 시작', 'start'],
+    ['배식 완료', 'complete'], ['자동 시퀀스 종료. 대기 중...', 'complete']
+  ]);
   class Session {
     constructor({ write, change = () => {} }) {
       this.write = write; this.change = change; this.state = 'idle'; this.buffer = '';
@@ -31,16 +35,17 @@
       this.buffer += typeof bytes === 'string' ? bytes : this.decoder.decode(bytes, { stream: true });
       const lines = this.buffer.split(/\r\n|\n|\r/); this.buffer = lines.pop();
       for (const line of lines) this.message(line.trim());
-      if (['배식 시작', '배식 완료'].includes(this.buffer.trim())) {
+      if (signals.has(this.buffer.trim())) {
         const message = this.buffer.trim(); this.buffer = ''; this.message(message);
       }
       if (this.buffer.length > 1024) this.buffer = '';
     }
     message(message) {
-      if (!['배식 시작', '배식 완료'].includes(message)) return;
+      const signal = signals.get(message);
+      if (!signal) return;
       if (this.state === 'sending') { this.pending.push(message); return; }
-      if (message === '배식 시작' && this.state === 'waiting') this.transition('serving');
-      else if (message === '배식 완료' && this.state === 'serving') this.transition('complete');
+      if (signal === 'start' && this.state === 'waiting') this.transition('serving');
+      else if (signal === 'complete' && this.state === 'serving') this.transition('complete');
     }
     fail(reason) {
       if (['sending', 'waiting', 'serving'].includes(this.state)) {
