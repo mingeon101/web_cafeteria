@@ -834,7 +834,7 @@ root.MealIntegration={reservation,sharedWindow};
 .allergy-blocked{background:#fff0f0!important;border:2px solid #d74747!important;color:#a51f2b!important}.allergy-note{display:block;color:#ad2430;font-size:13px;font-weight:800;line-height:1.6;margin:9px 0;overflow-wrap:anywhere}.allergy-blocked button:disabled,.allergy-blocked input:disabled{opacity:.45;cursor:not-allowed}.allergy-banner{border:1px solid #edb7bb;background:#fff3f3;color:#9e2530;border-radius:13px;padding:12px 15px;margin:12px 0;font-size:14px;line-height:1.7}.allergy-fieldset{grid-column:1/-1;border:1px solid #c8e1e8;border-radius:12px;padding:14px;min-width:0}.allergy-fieldset legend{font-weight:800;padding:0 6px}.allergy-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:9px}.allergy-options label{display:flex;align-items:center;gap:7px;font-size:13px;margin:0;padding:5px}.allergy-options input{width:auto!important;accent-color:#bc293b}.allergy-fieldset p{font-size:12px;line-height:1.7;color:#526a72;margin:8px 0}.allergy-extra{margin-top:10px}.student-allergy-value{color:#ac2634;max-width:220px;overflow-wrap:anywhere}
 
 .food-circle.allergy-blocked{aspect-ratio:auto;min-height:175px;border-radius:26px;padding:12px 5px}.food-circle.allergy-blocked .allergy-note{font-size:11px;text-align:center;max-width:95%;margin:7px auto}.final-row.allergy-blocked,.edit-row.allergy-blocked{flex-wrap:wrap}.final-row.allergy-blocked>.allergy-note,.edit-row.allergy-blocked>.allergy-note{flex:0 0 100%;width:100%;text-align:center}
-</style></head>
+</style><script src="../student-card-core.js?v=1"></script><style>#ocr-panel [hidden]{display:none!important}</style></head>
 
 <body data-allergy-mode="preorder">
 
@@ -2196,33 +2196,14 @@ async function captureStudentCard() {
   button.textContent = "인식 중...";
   setStudentStatus("loading", "Gemini로 학생증의 이름을 확인하고 있습니다...");
   try {
-    if (!GEMINI_API_KEY) await initGeminiKey();
+    const identity = await StudentCardCore.read(video, {current, getEndpoint: async () => {
+      if (!GEMINI_API_KEY) await initGeminiKey();
+      return GEMINI_API_KEY ? GEMINI_ENDPOINT : "";
+    }});
     if (!current()) return;
-    if (!GEMINI_API_KEY) throw Error("OCR API 키를 불러오지 못했습니다. 다시 촬영해 주세요.");
-    const canvas = document.getElementById("ocr-canvas");
-    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-    canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
-    const imageBase64 = canvas.toDataURL("image/jpeg", 0.9).split(",")[1];
-    const response = await fetch(GEMINI_ENDPOINT, {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({
-        contents: [{parts: [
-          {text: "이 학생증 또는 명찰 이미지에서 학생의 사람 이름만 읽어주세요. 이름만 답하세요. 읽을 수 없다면 NONE이라고 답하세요."},
-          {inline_data: {mime_type: "image/jpeg", data: imageBase64}}
-        ]}],
-        generationConfig: {temperature: 0.1}
-      })
-    });
+    const snapshot = await db.ref("students").once("value");
     if (!current()) return;
-    const data = await response.json();
-    if (!current()) return;
-    if (!response.ok) throw Error(data.error?.message || "OCR 요청 실패");
-    const rawName = (data?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim().replace(/[`"'*.]/g, "");
-    if (!rawName || rawName === "NONE") throw Error("학생 이름을 인식하지 못했습니다.");
-    const student = await lookupStudentByName(rawName);
-    if (!current()) return;
-    if (!student) throw Error("학생증에 해당하는 등록 학생을 찾지 못했습니다.");
+    const student = StudentCardCore.choose(snapshot.val(), identity);
     user = student;
     document.getElementById("input-grade").value = user.grade || "";
     document.getElementById("input-class").value = user.classNum || "";
