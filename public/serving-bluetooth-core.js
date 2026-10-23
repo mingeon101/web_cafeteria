@@ -1,6 +1,7 @@
 /* Three ordered serial writes, followed by device-confirmed serving states. */
 (function (root) {
   'use strict';
+  const COMMAND_GAP_MS = 300;
   const signals = new Map([
     ['배식을 시작합니다', 'start'], ['배식을 완료했습니다', 'complete'],
     ['배식 시작', 'start'], ['물체 감지됨: 자동 시퀀스 시작', 'start'],
@@ -27,7 +28,8 @@
           // cannot become a phantom zero at the next loop; parseInt ends on timeout.
           await this.write(new TextEncoder().encode(String(counts[index]) + (index === 1 ? '' : '\n')));
           if (this.state !== 'sending') throw Error('전송 상태를 확인할 수 없습니다.');
-          this.change('sending', label + ' ' + counts[index] + '회 전송됨', this.snapshot);
+          this.change('sending', label + ' ' + counts[index] + '회 전송됨' + (index === 1 ? '' : ' · 다음 신호까지 0.3초 대기'), this.snapshot);
+          if (index !== 1) await new Promise(resolve => setTimeout(resolve, COMMAND_GAP_MS));
         }
         this.transition('serving');
         for (const message of this.pending.splice(0)) this.message(message);

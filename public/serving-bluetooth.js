@@ -15,7 +15,7 @@
   panel.innerHTML = `<div class="bt-toolbar"><b>배식 장치</b><span id="bt-status" role="status" aria-live="polite">연결 안 됨</span><button type="button" id="bt-connect">블루투스 연결</button><button type="button" id="bt-disconnect" disabled>연결 해제</button></div>
   <p>PC에서 HC-05 / HC-06을 먼저 페어링한 뒤, 연결 버튼을 눌러 해당 장치 또는 블루투스 COM 포트를 선택하세요.</p>
   <p>아두이노에 밥 → 반찬 → 국 횟수를 전송한 뒤 바로 진행 중으로 표시합니다. 시작 응답은 기다리지 않고 완료 응답만 확인합니다.</p>
-  <details id="bt-settings"><summary>통신 설정</summary><div class="bt-fields"><label>통신 속도<select id="bt-baud"><option value="9600">9600 bps</option><option value="19200">19200 bps</option><option value="38400">38400 bps</option><option value="57600">57600 bps</option><option value="115200">115200 bps</option></select></label></div><p>아두이노·모듈과 통신 속도를 맞춰 주세요. 밥 → 반찬 → 국 순서로 각각 따로 전송합니다. 마지막 숫자 뒤에는 줄바꿈을 붙이지 않습니다.</p></details>
+  <details id="bt-settings"><summary>통신 설정</summary><div class="bt-fields"><label>통신 속도<select id="bt-baud"><option value="9600">9600 bps</option><option value="19200">19200 bps</option><option value="38400">38400 bps</option><option value="57600">57600 bps</option><option value="115200">115200 bps</option></select></label></div><p>아두이노·모듈과 통신 속도를 맞춰 주세요. 밥 전송 → 0.3초 대기 → 반찬 전송 → 0.3초 대기 → 국 전송 순서로 진행합니다. 마지막 숫자 뒤에는 줄바꿈을 붙이지 않습니다.</p></details>
   <p id="bt-error" role="alert" hidden></p><button type="button" id="bt-reconcile" hidden>장치 확인 후 작업 종료</button><button type="button" id="bt-save-retry" hidden>완료 기록 저장 재시도</button>`;
   document.querySelector('#app .header').after(panel);
   const style = document.createElement('style'); style.textContent = `.bt-panel{background:#fff;border:1px solid #ddd9ed;border-radius:18px;padding:16px 20px;margin:0 0 20px;color:#252337}.bt-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.bt-toolbar span{flex:1;font-size:14px}.bt-panel button{border:0;border-radius:10px;padding:10px 16px;background:#6c55d9;color:#fff;cursor:pointer}.bt-panel button:disabled{opacity:.45;cursor:default}.bt-panel details{margin-top:10px;font-size:13px}.bt-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.bt-fields label{display:grid;gap:5px}.bt-fields input,.bt-fields select{width:100%;box-sizing:border-box;border:1px solid #d7d2e5;border-radius:8px;padding:9px}.bt-panel p{font-size:13px;line-height:1.6;margin:10px 0 0}#bt-error{color:#b42318}#bt-reconcile,#bt-save-retry{margin-top:10px;background:#9a3e21}.bt-item{border:1px solid #ddd9ed;border-radius:14px;padding:18px;display:flex;justify-content:space-between;gap:10px}.bt-item span{color:#6c55d9}.bt-item+ .bt-item{margin-top:10px}@media(max-width:600px){.bt-fields{grid-template-columns:1fr}.bt-toolbar span{flex-basis:60%}}`;
@@ -174,7 +174,7 @@
       document.getElementById('btn-progress-edit').hidden = true;
       document.getElementById('progress-edit-panel').classList.remove('show'); goPage('progress');
       txSequence = 0;
-      btLog('SEND_COUNTS', { rice: snapshot.counts[0], side: snapshot.counts[2], soup: snapshot.counts[1], order: '밥 → 반찬 → 국' });
+      btLog('SEND_COUNTS', { rice: snapshot.counts[0], side: snapshot.counts[2], soup: snapshot.counts[1], order: '밥 → 반찬 → 국', gapMs: 300 });
       await session.send(snapshot.counts, snapshot);
       btLog('SEND_FINISHED', { state: session.state, note: '세 쓰기 완료 · 마지막 숫자는 parseInt 타임아웃으로 확정' });
     } catch (error) {
