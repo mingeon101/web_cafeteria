@@ -1125,8 +1125,8 @@
             id="custom-count"
             type="number"
             min="0"
-            max="20"
-            placeholder="직접 입력 (0~20)"
+            max="9"
+            placeholder="직접 입력 (0~9)"
           />
 
           <button
@@ -3381,6 +3381,7 @@ if(AllergyClient.status().every(x=>x.blocked)){goPage('dashboard');renderDashboa
       value
     ) {
 if(window.AllergyClient?.blocked(serveStep)){counts[serveStep]=0;AllergyClient.paint();return;}
+if(!Number.isInteger(value)||value<0||value>9){alert('현재 아두이노는 0~9회만 받습니다.');return;}
 
 
       counts[serveStep] =
@@ -4930,7 +4931,7 @@ await AllergyClient.refresh();AllergyClient.sanitize(counts);
  setInterval(()=>{bind();const next=JSON.stringify([uid,meal,values,ready,failure]);if(next!==signature){signature=next;changed();}},250);bind();
 })();
 </script>
-<script src="./serving-bluetooth-core.js?v=5"></script>
-<script src="./serving-bluetooth.js?v=6"></script>
+<script src="./serving-bluetooth-core.js?v=6"></script>
+<script src="./serving-bluetooth.js?v=7"></script>
 </body>
 </html>
