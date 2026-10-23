@@ -4,6 +4,9 @@
   let port = null, reader = null, writer = null, readTask = null;
   let connected = false, opening = false, writing = false, closing = false;
   let decoder = new TextDecoder();
+  const connectionPanel = document.querySelector('.connection');
+  $('disconnect').textContent = '연결 종료'; $('disconnect').hidden = true;
+  document.body.append($('disconnect'));
   function log(event, data = {}) {
     const stamp = new Date().toLocaleTimeString('ko-KR', { hour12: false }) + '.' + String(new Date().getMilliseconds()).padStart(3, '0');
     const line = document.createElement('div'); line.textContent = `[${stamp}] ${event} ${JSON.stringify(data)}`;
@@ -15,6 +18,8 @@
   function notice(text = '') { $('notice').textContent = text; }
   function render() {
     const busy = opening || writing || closing;
+    connectionPanel.hidden = connected;
+    $('disconnect').hidden = !connected;
     $('connect').disabled = connected || busy || !navigator.serial;
     $('disconnect').disabled = !connected || busy;
     $('baud').disabled = connected || busy;

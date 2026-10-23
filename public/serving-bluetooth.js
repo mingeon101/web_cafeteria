@@ -18,7 +18,11 @@
   <details id="bt-settings"><summary>통신 설정</summary><div class="bt-fields"><label>통신 속도<select id="bt-baud"><option value="9600">9600 bps</option><option value="19200">19200 bps</option><option value="38400">38400 bps</option><option value="57600">57600 bps</option><option value="115200">115200 bps</option></select></label></div><p>아두이노·모듈과 통신 속도를 맞춰 주세요. 밥 전송 → 0.3초 대기 → 반찬 전송 → 0.3초 대기 → 국 전송 순서로 진행합니다. 각 신호는 숫자 문자 1바이트이며 줄바꿈을 붙이지 않습니다. 입력 범위는 0~9회입니다.</p></details>
   <p id="bt-error" role="alert" hidden></p><button type="button" id="bt-reconcile" hidden>장치 확인 후 작업 종료</button><button type="button" id="bt-save-retry" hidden>완료 기록 저장 재시도</button>`;
   document.querySelector('#app .header').after(panel);
+  const disconnectButton = $bt('disconnect');
+  disconnectButton.textContent = '연결 종료'; disconnectButton.hidden = true;
+  document.body.append(disconnectButton);
   const style = document.createElement('style'); style.textContent = `.bt-panel{background:#fff;border:1px solid #ddd9ed;border-radius:18px;padding:16px 20px;margin:0 0 20px;color:#252337}.bt-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.bt-toolbar span{flex:1;font-size:14px}.bt-panel button{border:0;border-radius:10px;padding:10px 16px;background:#6c55d9;color:#fff;cursor:pointer}.bt-panel button:disabled{opacity:.45;cursor:default}.bt-panel details{margin-top:10px;font-size:13px}.bt-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.bt-fields label{display:grid;gap:5px}.bt-fields input,.bt-fields select{width:100%;box-sizing:border-box;border:1px solid #d7d2e5;border-radius:8px;padding:9px}.bt-panel p{font-size:13px;line-height:1.6;margin:10px 0 0}#bt-error{color:#b42318}#bt-reconcile,#bt-save-retry{margin-top:10px;background:#9a3e21}.bt-item{border:1px solid #ddd9ed;border-radius:14px;padding:18px;display:flex;justify-content:space-between;gap:10px}.bt-item span{color:#6c55d9}.bt-item+ .bt-item{margin-top:10px}@media(max-width:600px){.bt-fields{grid-template-columns:1fr}.bt-toolbar span{flex-basis:60%}}`;
+  style.textContent += `.bt-panel.bt-panel--connected{background:none;border:0;border-radius:0;padding:0;margin:0;box-shadow:none}.bt-panel--connected>.bt-toolbar,.bt-panel--connected>details,.bt-panel--connected>p:not(#bt-error){display:none}#bt-disconnect{position:fixed;top:14px;right:18px;z-index:990;border:1px solid #dedde5;border-radius:8px;padding:7px 10px;background:#ffffffd9;color:#797886;font:12px system-ui,sans-serif;cursor:pointer;opacity:.55}#bt-disconnect:hover,#bt-disconnect:focus-visible{opacity:1}#bt-disconnect:disabled{opacity:.3;cursor:default}#bt-disconnect[hidden]{display:none!important}`;
   document.head.append(style);
   try { const config = JSON.parse(localStorage.getItem(settingsKey) || 'null'); if (config) { if (['9600', '19200', '38400', '57600', '115200'].includes(String(config.baud))) $bt('baud').value = String(config.baud); } }
   catch { /* Invalid local preferences are ignored. */ }
@@ -28,6 +32,8 @@
   function report(message = '') { if (message) btLog('NOTICE', { message }, 'warn'); $bt('error').hidden = !message; $bt('error').textContent = message; }
   function controls() {
     const busy = locked();
+    panel.classList.toggle('bt-panel--connected', connected);
+    disconnectButton.hidden = !connected;
     $bt('connect').disabled = connecting || closing || connected || busy;
     $bt('disconnect').disabled = !connected || busy;
     for (const id of ['baud']) $bt(id).disabled = connected || connecting || closing || busy;
