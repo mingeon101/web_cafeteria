@@ -926,7 +926,7 @@ body {
 }
 
 </style>
-</head>
+<script src="../student-card-core.js?v=1"></script><style>#ocrCard [hidden]{display:none!important}</style></head>
 
 <body>
 
@@ -1095,6 +1095,10 @@ body {
         🙂 지금 다시 확인
       </button>
 
+
+      <button class="btn-capture" id="btnStudentCardMode">학생증 인식</button>
+      <button class="btn-capture" id="btnStudentCardCapture" hidden>학생증 촬영</button>
+      <button class="btn-capture" id="btnReviewFaceMode" hidden>얼굴 자동 인식으로 돌아가기</button>
 
       <!-- MANUAL -->
 
@@ -1795,6 +1799,7 @@ async function loadFaceModels() {
 
 
 
+let reviewRecognitionMode = "face", reviewCardBusy = false;
 let reviewFaceTimer = null, reviewFaceGeneration = 0, reviewFaceBusy = false;
 function canReviewFace() {
   return !currentStudent && !$("ocrCard").classList.contains("hidden") && !document.hidden;
@@ -1808,7 +1813,7 @@ function startReviewAutoFace() {
   clearTimeout(reviewFaceTimer);
   const generation = reviewFaceGeneration;
   const scan = async () => {
-    if (generation !== reviewFaceGeneration || !canReviewFace()) return;
+    if (generation !== reviewFaceGeneration || !canReviewFace() || reviewRecognitionMode !== "face") return;
     if (faceModelsReady && recogStream && $("videoRecog").videoWidth && !reviewFaceBusy) await captureFaceLogin(true);
     if (generation === reviewFaceGeneration && canReviewFace()) reviewFaceTimer = setTimeout(scan, 450);
   };
@@ -1825,7 +1830,7 @@ async function captureFaceLogin(automatic = false) {
   if (reviewFaceBusy || !canReviewFace()) return;
   if (!recogStream) { await initRecognition(); return; }
   const generation = reviewFaceGeneration;
-  const current = () => generation === reviewFaceGeneration && canReviewFace();
+  const current = () => generation === reviewFaceGeneration && canReviewFace() && reviewRecognitionMode === "face";
   reviewFaceBusy = true;
 
   const video = $("videoRecog");
@@ -1974,8 +1979,9 @@ async function initRecognition() {
     video.srcObject = stream;
     await video.play();
     if (generation !== reviewFaceGeneration || !canReviewFace()) return;
-    setOcrStatus("loading", "얼굴을 비추면 자동으로 로그인합니다.");
-    startReviewAutoFace();
+    syncReviewCardButtons();
+    setOcrStatus("loading", reviewRecognitionMode === "card" ? "학생증을 비추고 학생증 촬영 버튼을 누르세요." : "얼굴을 비추면 자동으로 로그인합니다.");
+    if (reviewRecognitionMode === "face") startReviewAutoFace();
   } catch (error) {
     if (generation !== reviewFaceGeneration) return;
     stopRecogCamera();
@@ -2136,254 +2142,48 @@ function resetOcrUI() {
    GEMINI OCR
 ===================================================== */
 
-async function captureAndOCR() {
-
-  const video =
-    $("videoRecog");
-
-  const canvas =
-    $("ocrCanvas");
-
-  const button =
-    $("btnCapture");
-
-
-  resetOcrUI();
-
-
-  $("ocrVideoWrap")
-    .classList
-    .add("shutter-flash");
-
-
-  setTimeout(() => {
-
-    $("ocrVideoWrap")
-      .classList
-      .remove("shutter-flash");
-
-  }, 350);
-
-
-  button.disabled =
-    true;
-
-  button.textContent =
-    "학생 검색 중...";
-
-
-  setOcrStatus(
-    "loading",
-    "학생 이름을 인식하는 중..."
-  );
-
-
-  canvas.width =
-    video.videoWidth || 640;
-
-  canvas.height =
-    video.videoHeight || 480;
-
-
-  const context =
-    canvas.getContext("2d");
-
-
-  context.drawImage(
-    video,
-    0,
-    0,
-    canvas.width,
-    canvas.height
-  );
-
-
-  const base64Img =
-    canvas
-      .toDataURL(
-        "image/jpeg",
-        .92
-      )
-      .split(",")[1];
-
-
-  let recognizedName =
-    null;
-
-
-  try {
-
-    if (!GEMINI_API_KEY) {
-
-      await initGeminiKey();
-
-    }
-
-
-    if (!GEMINI_API_KEY) {
-
-      throw new Error(
-        "Gemini API Key가 없습니다."
-      );
-
-    }
-
-
-    const response =
-      await fetch(
-        GEMINI_ENDPOINT,
-        {
-
-          method:
-            "POST",
-
-          headers: {
-
-            "Content-Type":
-              "application/json"
-
-          },
-
-          body:
-            JSON.stringify({
-
-              contents: [
-
-                {
-
-                  parts: [
-
-                    {
-
-                      text:
-                        "이 이미지에서 사람 이름(한국어 또는 영어)만 찾아서 이름만 답하세요. 이름이 없거나 읽을 수 없으면 정확히 NONE 이라고만 답하세요. 다른 설명은 절대 하지 마세요."
-
-                    },
-
-                    {
-
-                      inline_data: {
-
-                        mime_type:
-                          "image/jpeg",
-
-                        data:
-                          base64Img
-
-                      }
-
-                    }
-
-                  ]
-
-                }
-
-              ],
-
-              generationConfig: {
-
-                temperature:
-                  0.1,
-
-                topP:
-                  1
-
-              }
-
-            })
-
-        }
-
-      );
-
-
-    const data =
-      await response.json();
-
-
-    if (!response.ok) {
-
-      throw new Error(
-        data.error?.message ||
-        "Gemini 연결 실패"
-      );
-
-    }
-
-
-    const raw =
-      (
-        data
-          .candidates?.[0]
-          ?.content
-          ?.parts?.[0]
-          ?.text ||
-        ""
-      ).trim();
-
-
-    if (
-
-      raw &&
-      raw !== "NONE" &&
-      raw.length >= 2 &&
-      raw.length <= 15
-
-    ) {
-
-      recognizedName =
-        raw;
-
-    }
-
-
-  } catch (error) {
-
-    console.error(
-      "Gemini OCR 오류:",
-      error
-    );
-
-  }
-
-
-  setOcrStatus(
-    "hidden"
-  );
-
-
-  if (recognizedName) {
-
-    await handleNameFound(
-      recognizedName
-    );
-
-  } else {
-
-    setFirebaseStatus(
-      "not-found",
-      "⚠️ 이름을 인식하지 못했어요. 직접 입력해 주세요."
-    );
-
-
-    button.textContent =
-      "📷 다시 찍기";
-
-    button.disabled =
-      false;
-
-    button.onclick =
-      captureAndOCR;
-
-
-    $("manualInputWrap")
-      .classList
-      .add("visible");
-
-  }
-
+function syncReviewCardButtons() {
+  $("btnStudentCardMode").hidden = reviewRecognitionMode === "card";
+  $("btnStudentCardCapture").hidden = $("btnReviewFaceMode").hidden = reviewRecognitionMode !== "card";
+  $("btnCapture").hidden = reviewRecognitionMode === "card";
 }
-
+async function openReviewCardMode() {
+  reviewRecognitionMode = "card"; stopRecogCamera(); syncReviewCardButtons(); await initRecognition();
+}
+async function resumeReviewFaceMode() {
+  reviewRecognitionMode = "face"; stopRecogCamera(); syncReviewCardButtons(); await initRecognition();
+}
+async function captureAndOCR() {
+  if (reviewCardBusy || !canReviewFace() || reviewRecognitionMode !== "card") return;
+  const generation = reviewFaceGeneration;
+  const current = () => generation === reviewFaceGeneration && canReviewFace() && reviewRecognitionMode === "card";
+  const button = $("btnStudentCardCapture");
+  reviewCardBusy = true; button.disabled = true;
+  setOcrStatus("loading", "Gemini로 학생증 정보를 읽고 있습니다...");
+  try {
+    const identity = await StudentCardCore.read($("videoRecog"), {current, getEndpoint: async () => {
+      if (!GEMINI_API_KEY) await initGeminiKey();
+      return GEMINI_API_KEY ? GEMINI_ENDPOINT : "";
+    }});
+    if (!current()) return;
+    const snapshot = await get(ref(db, "students"));
+    if (!current()) return;
+    const student = StudentCardCore.choose(snapshot.val(), identity);
+    currentStudent = student;
+    try { sessionStorage.setItem("reviewStudent", JSON.stringify(student)); } catch {}
+    $("ocrResultName").textContent = student.name; $("ocrResultBox").classList.add("visible");
+    setOcrStatus("hidden");
+    setFirebaseStatus("found", student.name + " 학생 확인 완료");
+    updateUserBar(student);
+    stopRecogCamera();
+    const accepted = reviewFaceGeneration;
+    setTimeout(() => { if (accepted === reviewFaceGeneration && currentStudent?.uid === student.uid) showReviewApp(); }, 500);
+  } catch (error) {
+    if (current()) { setOcrStatus("hidden"); setFirebaseStatus("error", error.message || "학생증 인식에 실패했습니다."); $("manualInputWrap").classList.add("visible"); }
+  } finally {
+    reviewCardBusy = false; button.disabled = false;
+  }
+}
 
 /* =====================================================
    STUDENT LOOKUP
@@ -2531,8 +2331,7 @@ async function handleNameFound(
         false;
 
 
-      button.onclick =
-        captureAndOCR;
+      button.onclick = openReviewCardMode;
 
 
       $("manualInputWrap")
@@ -2604,8 +2403,7 @@ async function handleNameFound(
       false;
 
 
-    button.onclick =
-      captureAndOCR;
+    button.onclick = openReviewCardMode;
 
   }
 
@@ -3850,6 +3648,8 @@ $("logoutButton")
 
       currentStudent =
         null;
+      reviewRecognitionMode = "face";
+      syncReviewCardButtons();
 
 
       sessionStorage.removeItem(
@@ -3924,6 +3724,10 @@ $("logoutButton")
 /* =====================================================
    BUTTON EVENTS
 ===================================================== */
+
+$("btnStudentCardMode").onclick = openReviewCardMode;
+$("btnStudentCardCapture").onclick = captureAndOCR;
+$("btnReviewFaceMode").onclick = resumeReviewFaceMode;
 
 $("btnCapture")
   .onclick =

@@ -725,7 +725,7 @@
 .allergy-blocked{background:#fff0f0!important;border:2px solid #d74747!important;color:#a51f2b!important}.allergy-note{display:block;color:#ad2430;font-size:13px;font-weight:800;line-height:1.6;margin:9px 0;overflow-wrap:anywhere}.allergy-blocked button:disabled,.allergy-blocked input:disabled{opacity:.45;cursor:not-allowed}.allergy-banner{border:1px solid #edb7bb;background:#fff3f3;color:#9e2530;border-radius:13px;padding:12px 15px;margin:12px 0;font-size:14px;line-height:1.7}.allergy-fieldset{grid-column:1/-1;border:1px solid #c8e1e8;border-radius:12px;padding:14px;min-width:0}.allergy-fieldset legend{font-weight:800;padding:0 6px}.allergy-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:9px}.allergy-options label{display:flex;align-items:center;gap:7px;font-size:13px;margin:0;padding:5px}.allergy-options input{width:auto!important;accent-color:#bc293b}.allergy-fieldset p{font-size:12px;line-height:1.7;color:#526a72;margin:8px 0}.allergy-extra{margin-top:10px}.student-allergy-value{color:#ac2634;max-width:220px;overflow-wrap:anywhere}
 
 .food-circle.allergy-blocked{aspect-ratio:auto;min-height:175px;border-radius:26px;padding:12px 5px}.food-circle.allergy-blocked .allergy-note{font-size:11px;text-align:center;max-width:95%;margin:7px auto}.final-row.allergy-blocked,.edit-row.allergy-blocked{flex-wrap:wrap}.final-row.allergy-blocked>.allergy-note,.edit-row.allergy-blocked>.allergy-note{flex:0 0 100%;width:100%;text-align:center}
-</style></head>
+</style><script src="student-card-core.js?v=1"></script><style>#page-recognition [hidden]{display:none!important}</style></head>
 
 <body data-allergy-mode="serve">
   <div id="app">
@@ -814,6 +814,10 @@
         >
           🙂 지금 다시 확인
         </button>
+
+        <button id="btn-student-card" class="btn btn-secondary">학생증 인식</button>
+        <button id="btn-card-capture" class="btn btn-primary" hidden>학생증 촬영</button>
+        <button id="btn-face-mode" class="btn btn-secondary" hidden>얼굴 자동 인식으로 돌아가기</button>
 
         <button
           id="btn-restart-camera"
@@ -1516,6 +1520,7 @@
     function goPage(name) {
 
       if (name !== "recognition") stopRecognitionCamera();
+      else { recognitionMode = "face"; syncCardButtons(); }
 
       document
         .querySelectorAll(
@@ -1815,6 +1820,7 @@
     }
 
 
+    let recognitionMode = "face", cardLoginBusy = false;
     let autoFaceTimer = null;
     let faceRecognitionGeneration = 0;
     function faceRecognitionActive() {
@@ -1829,7 +1835,7 @@
       clearTimeout(autoFaceTimer);
       const generation = faceRecognitionGeneration;
       const scan = async () => {
-        if (generation !== faceRecognitionGeneration || !faceRecognitionActive()) return;
+        if (generation !== faceRecognitionGeneration || !faceRecognitionActive() || recognitionMode !== "face") return;
         const video = document.getElementById("video-recog");
         if (faceModelsReady && recognitionStream && video.videoWidth && !faceLoginBusy) {
           await captureFaceLogin(true);
@@ -1844,6 +1850,7 @@
 
 async function initRecognition() {
       if (!systemOperating || !faceRecognitionActive()) return;
+      syncCardButtons();
       stopRecognitionCamera();
       const generation = faceRecognitionGeneration;
       const video = $("video-recog");
@@ -1860,9 +1867,9 @@ async function initRecognition() {
         video.srcObject = stream;
         await video.play();
         if (generation !== faceRecognitionGeneration || !faceRecognitionActive()) return;
-        $("face-camera-badge").textContent = "🙂 얼굴을 비추면 자동으로 확인합니다";
-        setRecognitionStatus("loading", "카메라 정면을 바라봐 주세요. 자동으로 학생을 확인합니다.");
-        startAutoFaceRecognition();
+        $("face-camera-badge").textContent = recognitionMode === "card" ? "학생증의 이름·학년·반·번호를 보여주세요" : "🙂 얼굴을 비추면 자동으로 확인합니다";
+        setRecognitionStatus("loading", recognitionMode === "card" ? "학생증을 비추고 학생증 촬영 버튼을 누르세요." : "카메라 정면을 바라봐 주세요. 자동으로 학생을 확인합니다.");
+        if (recognitionMode === "face") startAutoFaceRecognition();
       } catch (error) {
         if (generation !== faceRecognitionGeneration) return;
         stopRecognitionCamera();
@@ -2003,7 +2010,7 @@ async function initRecognition() {
     async function captureFaceLogin(automatic = false) {
       automatic = automatic === true;
       const generation = faceRecognitionGeneration;
-      const current = () => generation === faceRecognitionGeneration && faceRecognitionActive();
+      const current = () => generation === faceRecognitionGeneration && faceRecognitionActive() && recognitionMode === "face";
 
       if (
         faceLoginBusy ||
@@ -2200,6 +2207,52 @@ async function initRecognition() {
       }
 
     }
+
+    function syncCardButtons() {
+      $("btn-student-card").hidden = recognitionMode === "card";
+      $("btn-card-capture").hidden = $("btn-face-mode").hidden = recognitionMode !== "card";
+      $("btn-capture").hidden = recognitionMode === "card";
+    }
+    async function openCardMode() {
+      recognitionMode = "card"; stopRecognitionCamera(); syncCardButtons(); await initRecognition();
+    }
+    async function resumeFaceMode() {
+      recognitionMode = "face"; stopRecognitionCamera(); syncCardButtons(); await initRecognition();
+    }
+    async function captureOnsiteCard() {
+      if (cardLoginBusy || recognitionMode !== "card" || !faceRecognitionActive()) return;
+      const generation = faceRecognitionGeneration;
+      const current = () => generation === faceRecognitionGeneration && recognitionMode === "card" && faceRecognitionActive();
+      const button = $("btn-card-capture");
+      cardLoginBusy = true; button.disabled = true;
+      setRecognitionStatus("loading", "Gemini로 학생증 정보를 읽고 있습니다...");
+      try {
+        const identity = await StudentCardCore.read($("video-recog"), {current, getEndpoint: async () => {
+          if (!GEMINI_API_KEY) await initGeminiKey();
+          return GEMINI_API_KEY ? GEMINI_ENDPOINT : "";
+        }});
+        if (!current()) return;
+        const snapshot = await db.ref("students").once("value");
+        if (!current()) return;
+        const student = StudentCardCore.choose(snapshot.val(), identity);
+        user = student;
+        $("recognized-student").style.display = "flex";
+        $("recognized-name").textContent = student.name;
+        $("recognized-meta").textContent = userMeta(student);
+        setRecognitionStatus("success", student.name + " 학생을 확인했습니다.");
+        stopRecognitionCamera();
+        const accepted = faceRecognitionGeneration;
+        setTimeout(() => { if (accepted === faceRecognitionGeneration && user?.uid === student.uid && faceRecognitionActive()) openConfirmPage(); }, 600);
+      } catch (error) {
+        if (current()) setRecognitionStatus("error", error.message || "학생증 인식에 실패했습니다.");
+      } finally {
+        cardLoginBusy = false; button.disabled = false;
+      }
+    }
+    $("btn-student-card").onclick = openCardMode;
+    $("btn-card-capture").onclick = captureOnsiteCard;
+    $("btn-face-mode").onclick = resumeFaceMode;
+
     function openConfirmPage() {
 
       if (!user) {
