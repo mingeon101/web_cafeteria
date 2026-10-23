@@ -14,7 +14,7 @@
   const panel = document.createElement('section'); panel.className = 'bt-panel';
   panel.innerHTML = `<div class="bt-toolbar"><b>배식 장치</b><span id="bt-status" role="status" aria-live="polite">연결 안 됨</span><button type="button" id="bt-connect">블루투스 연결</button><button type="button" id="bt-disconnect" disabled>연결 해제</button></div>
   <p>PC에서 HC-05 / HC-06을 먼저 페어링한 뒤, 연결 버튼을 눌러 해당 장치 또는 블루투스 COM 포트를 선택하세요.</p>
-  <p>아두이노에 밥 → 반찬 → 국 횟수를 전송한 뒤 식판 감지와 배식 완료 응답을 기다립니다.</p>
+  <p>아두이노에 밥 → 반찬 → 국 횟수를 전송한 뒤 바로 진행 중으로 표시합니다. 시작 응답은 기다리지 않고 완료 응답만 확인합니다.</p>
   <details id="bt-settings"><summary>통신 설정</summary><div class="bt-fields"><label>통신 속도<select id="bt-baud"><option value="9600">9600 bps</option><option value="19200">19200 bps</option><option value="38400">38400 bps</option><option value="57600">57600 bps</option><option value="115200">115200 bps</option></select></label></div><p>아두이노·모듈과 통신 속도를 맞춰 주세요. 밥 → 반찬 → 국 순서로 각각 따로 전송합니다. 마지막 숫자 뒤에는 줄바꿈을 붙이지 않습니다.</p></details>
   <p id="bt-error" role="alert" hidden></p><button type="button" id="bt-reconcile" hidden>장치 확인 후 작업 종료</button><button type="button" id="bt-save-retry" hidden>완료 기록 저장 재시도</button>`;
   document.querySelector('#app .header').after(panel);
@@ -41,16 +41,16 @@
     dbQueue.catch(() => report('장치 상태 기록을 저장하지 못했습니다. 연결을 확인하세요.'));
   }
   function render(state, detail, snapshot) {
-    const titles = { sending: '배식량 전송 중', waiting: '배식 시작을 기다리고 있어요', serving: '배식 진행 중', complete: '배식이 완료되었습니다!', error: '장치 확인이 필요합니다' };
+    const titles = { sending: '배식량 전송 중', serving: '배식 진행 중', complete: '배식이 완료되었습니다!', error: '장치 확인이 필요합니다' };
     $bt('status').textContent = titles[state] || (connected ? '연결됨' : '연결 안 됨');
     const page = document.getElementById('page-progress');
     page.querySelector('h1').textContent = titles[state] || '';
-    page.querySelector('.desc').textContent = state === 'error' ? '자동 재전송하지 않습니다. 장치 상태를 먼저 확인해 주세요.' : state === 'sending' ? (detail || '밥 → 반찬 → 국 순서로 전송합니다.') : state === 'waiting' ? '식판을 센서 앞에 놓아 주세요. ‘배식을 시작합니다’ 응답을 기다립니다.' : state === 'serving' ? '장치에서 배식하고 있습니다. ‘배식을 완료했습니다’ 응답을 기다립니다.' : '완료 기록을 저장하고 있습니다.';
+    page.querySelector('.desc').textContent = state === 'error' ? '자동 재전송하지 않습니다. 장치 상태를 먼저 확인해 주세요.' : state === 'sending' ? (detail || '밥 → 반찬 → 국 순서로 전송합니다.') : state === 'serving' ? '장치에서 배식하고 있습니다. ‘배식을 완료했습니다’ 응답을 기다립니다.' : '완료 기록을 저장하고 있습니다.';
     const list = document.getElementById('progress-list'); list.replaceChildren();
     for (const [index, label] of [[0, '밥'], [2, '반찬'], [1, '국']]) {
       const row = document.createElement('div'); row.className = 'bt-item';
       const name = document.createElement('b'); name.textContent = `${label} · 선택 ${snapshot?.counts?.[index] ?? 0}회`;
-      const status = document.createElement('span'); status.textContent = { sending: '전송 중', waiting: '응답 대기', serving: '배식 중', complete: '완료', error: '확인 필요' }[state];
+      const status = document.createElement('span'); status.textContent = { sending: '전송 중', serving: '배식 중', complete: '완료', error: '확인 필요' }[state];
       row.append(name, status); list.append(row);
     }
     if (state === 'error') report(detail || '연결 상태를 확인해 주세요.');
