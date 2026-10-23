@@ -4814,7 +4814,7 @@ await AllergyClient.refresh();AllergyClient.sanitize(counts);
  function badge(){for(const id of ['page-dashboard','page-serve','page-progress','page-complete']){
   let box=get(`arrival-${id}`);if(!box){box=document.createElement('div');box.id=`arrival-${id}`;box.className='arrival-badge';get(id)?.prepend(box);}box.replaceChildren();
   if(visit?.seatId&&visit.status==='seated'&&user?.uid===uid){const text=document.createElement('strong');text.textContent=`내 좌석: ${visit.label}`;box.append(text);const detail=document.createElement('span');detail.textContent=visit.source==='reservation'?'사전예약 좌석':'현장 자동 배정';box.append(detail);
-   if(id==='page-complete'){const button=document.createElement('button');button.textContent='식사 후 좌석 반납';button.onclick=returnSeat;box.append(button);}
+   if(id==='page-complete'){const button=document.createElement('button');button.textContent='지정 좌석에 앉으세요';button.onclick=returnSeat;box.append(button);}
    box.hidden=false;
   }else box.hidden=true;
  }}
