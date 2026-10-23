@@ -55,3 +55,16 @@ for(const quantities of [[2,3,1],[0,2,0]]){
 }
 assert.deepEqual(batches,[[2,1,3],[0,0,2]]);
 console.log('PASS new BT responses, split UTF-8/CRLF, numeric-only ordered commands, zero groups, consecutive parseInt batches without phantom zero.');
+
+// Each of the three writes has a real 300 ms gap before the next command.
+const timestamps=[];
+const spaced = new Session({write:async ()=>{timestamps.push(performance.now());}});
+await spaced.send([2,3,1],{});
+assert.equal(timestamps.length,3);
+assert(timestamps[1]-timestamps[0]>=280,'rice and side writes are separated');
+assert(timestamps[2]-timestamps[1]>=280,'side and soup writes are separated');
+let gapWrites=0,interrupted;
+interrupted = new Session({write:async()=>{gapWrites++;if(gapWrites===1)setTimeout(()=>interrupted.fail('disconnect between signals'),10);}});
+await assert.rejects(interrupted.send([1,1,1],{}));
+assert.equal(gapWrites,1);assert.equal(interrupted.state,'error');
+console.log('PASS real command spacing and disconnect during the interval stops remaining writes.');
