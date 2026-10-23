@@ -20,7 +20,7 @@
     $('baud').disabled = connected || busy;
     for (let i = 1; i <= 3; i++) {
       $('send-' + i).disabled = !connected || busy;
-      $('value-' + i).disabled = busy; $('lf-' + i).disabled = busy;
+      $('value-' + i).disabled = busy;
     }
     $('status').textContent = closing ? '연결 해제 중…' : opening ? '장치 선택 / 연결 중…' : connected ? '연결됨 · 버튼을 눌러 개별 전송' : '연결 안 됨';
   }
@@ -72,16 +72,17 @@
   async function send(index) {
     if (!connected || !writer || writing || opening || closing) return;
     const input = $('value-' + index), raw = input.value;
-    const number = Number(raw);
-    if (raw.trim() === '' || !Number.isInteger(number) || number < 0 || number > 20) { notice('0~20 사이의 정수를 입력해 주세요.'); input.focus(); return; }
-    const text = String(number) + ($('lf-' + index).checked ? '\n' : '');
-    const bytes = new TextEncoder().encode(text);
+    if (!/^[0-9]$/.test(raw)) { notice('숫자 문자 0~9 중 한 글자를 입력해 주세요.'); input.focus(); return; }
+    const text = raw;
+    const code = text.charCodeAt(0);
+    const bytes = Uint8Array.of(code);
+    const hex = '0x' + code.toString(16).toUpperCase().padStart(2, '0');
     writing = true; notice(); render();
-    log('TX_REQUEST', { input: index, number, text, bytes: Array.from(bytes) });
+    log('TX_REQUEST', { input: index, char: text, hex, bytes: Array.from(bytes), byteLength: bytes.length });
     try {
       await writer.write(bytes);
-      log('TX_WRITE_OK', { input: index, number, text });
-      $('result').textContent = `${index}번 숫자 ${number} 전송 쓰기 완료 · 아두이노 수신 확인 응답과는 별개입니다.`;
+      log('TX_WRITE_OK', { input: index, char: text, hex, byteLength: bytes.length });
+      $('result').textContent = `${index}번 문자 '${text}' (${hex}, 1바이트) 전송 쓰기 완료 · 아두이노 수신 확인 응답과는 별개입니다.`;
     } catch (error) { log('TX_ERROR', { input: index, ...errorInfo(error) }); lost(); }
     finally { writing = false; render(); }
   }
