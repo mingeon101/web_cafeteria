@@ -484,7 +484,7 @@ function renderRobots() {
 
     let statusText, statusColor;
     if (!systemOperating) { statusText = '정지됨'; statusColor = 'var(--muted)'; }
-    else if (isError) { statusText = '점검 필요'; statusColor = 'var(--danger)'; }
+    else if (isError) { statusText = '고장'; statusColor = 'var(--danger)'; }
     else if (needCharge) { statusText = '충전 필요'; statusColor = '#FF9800'; }
     else { statusText = '정상 작동'; statusColor = 'var(--success)'; }
 
