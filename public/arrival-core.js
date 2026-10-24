@@ -42,7 +42,7 @@
    state.groups[groupId]={id:groupId,leaderUid:p.uid,slotId:slot.id,status:'reserved',mode:'onsite',members:{[p.uid]:p},createdAt:now,reservation:{layoutVersionId:state.meta.layoutVersionId,seatIds:[seatId],assignments:{[p.uid]:seatId},createdAt:now}};
    state.memberGroups[p.uid]=groupId;
   }
-  const visit={status:'seated',groupId,slotId:slot.id,seatId,source,checkedInAt:now,...(ignoreTime?{timeCheckSkipped:true}:{})};state.arrivals[p.uid]=visit;
+  const visit={status:'seated',groupId,slotId:slot.id,seatId,source,checkedInAt:now};state.arrivals[p.uid]=visit;
   return {state,result:{...visit,label:seatById[seatId].label,reused:false}};
  }
  function release(current,uid,now=Date.now()){

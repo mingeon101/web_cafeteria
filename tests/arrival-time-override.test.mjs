@@ -4,7 +4,7 @@ const student=n=>({uid:'u'+n,name:'학생'+n,grade:1,classNum:1,number:n});
 const ctx={date:'2026-10-24',now:Date.parse('2026-10-24T19:00:00+09:00'),layoutVersionId:'v1',layout:{schemaVersion:1,columns:18,rows:10,tables:{t_one:{id:'t_one',label:'T1',x:1,y:1,capacity:2,rotation:0,zone:'onsite'},t_two:{id:'t_two',label:'T2',x:9,y:1,capacity:2,rotation:0,zone:'reservation'}}},config:{enabled:true,maxFriends:7,slots:{a:{start:'12:00',end:'12:30'},b:{start:'12:30',end:'13:00'}}}};
 const arrive=(state,n,extra={})=>A.arrive(state,{...ctx,student:student(n),...extra});
 assert.throws(()=>arrive(null,1),e=>e.code==='MEAL_TIME');
-let r=arrive(null,1,{ignoreTime:true});assert.equal(r.result.status,'seated');assert.equal(r.result.timeCheckSkipped,true);assert.equal(r.result.label,'T1-1');
+let r=arrive(null,1,{ignoreTime:true});assert.equal(r.result.status,'seated');assert.equal(Object.hasOwn(r.result,'timeCheckSkipped'),false);assert.equal(Object.hasOwn(r.state.arrivals.u1,'timeCheckSkipped'),false);assert.equal(r.result.label,'T1-1');
 assert.throws(()=>arrive(r.state,2),e=>e.code==='MEAL_TIME','override does not persist for next student');
 for(let n=2;n<=4;n++){const next=arrive(r.state,n,{ignoreTime:true});assert.notEqual(next.result.seatId,r.result.seatId);r=next;}
 assert.throws(()=>arrive(r.state,5,{ignoreTime:true}),/만석/);
