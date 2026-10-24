@@ -4,11 +4,12 @@
  const originalDashboard=showDashboard,originalStartServe=startServe;
  let token=0,timer=null,visit=null,uid=null,busy=false,dispatching=false,context=null,observedUid=null;
  const root=document.createElement('div');root.id='arrival-root';root.innerHTML=`<div id="arrival-overlay" hidden><section role="dialog" aria-modal="true" aria-labelledby="arrival-heading" tabindex="-1" id="arrival-panel"><h2 id="arrival-heading">좌석을 확인하고 있어요</h2><p id="arrival-name"></p><div id="arrival-seat">…</div><p id="arrival-detail"></p><p id="arrival-message" role="status" aria-live="polite"></p><div class="arrival-actions"><button id="arrival-continue" hidden>지금 배식 진행</button><button id="arrival-retry" hidden>다시 확인</button><button id="arrival-dashboard">대시보드 보기</button></div></section></div>`;
+ let timeSkipReady=false;
  document.body.append(root);
  const stop=()=>{clearInterval(timer);timer=null;};
  const message=(s,error=false)=>{get('arrival-message').textContent=s;get('arrival-message').style.color=error?'#ae3d32':'#476676';};
  function show(){get('arrival-overlay').hidden=false;get('arrival-panel').focus();}
- function hide(){stop();get('arrival-overlay').hidden=true;}
+ function hide(){timeSkipReady=false;stop();get('arrival-overlay').hidden=true;}
  function badge(){for(const id of ['page-dashboard','page-serve','page-progress','page-complete']){
   let box=get(`arrival-${id}`);if(!box){box=document.createElement('div');box.id=`arrival-${id}`;box.className='arrival-badge';get(id)?.prepend(box);}box.replaceChildren();
   if(visit?.seatId&&visit.status==='seated'&&user?.uid===uid){const text=document.createElement('strong');text.textContent=`내 좌석: ${visit.label}`;box.append(text);const detail=document.createElement('span');detail.textContent=visit.source==='reservation'?'사전예약 좌석':'현장 자동 배정';box.append(detail);
@@ -25,13 +26,14 @@
   else{const items=(await db.ref('cafeteriaLayoutEditor/layoutVersions').orderByKey().limitToLast(1).once('value')).val()||{};id=Object.keys(items)[0];layout=items[id];}
   return {date,config,layout:C.normalizeLayout(layout),layoutVersionId:id};
  }
- async function entry(){
+ async function entry(ignoreTime=false){
+  const skipTime=ignoreTime===true;timeSkipReady=false;
   if(!user?.uid||!systemOperating)return;const current=++token,student={...user},date=C.dayKey();stop();uid=student.uid;busy=true;visit=null;badge();show();
   get('arrival-heading').textContent='선주문과 좌석을 확인하고 있어요';get('arrival-name').textContent=`${student.name} · ${userMeta(student)}`;get('arrival-seat').textContent='…';get('arrival-detail').textContent='';get('arrival-retry').hidden=true;get('arrival-continue').hidden=true;message('잠시만 기다려 주세요.');
   try{
    const [ctx,preorder]=await Promise.all([setup(date),db.ref(`students/${student.uid}/preorders/${date}`).once('value')]);if(current!==token||user?.uid!==student.uid)return;
    context=ctx;todayPreorder=preorder.val();const ref=db.ref(`cafeteriaSeatReservations/days/${date}`);let result,error;
-   const transaction=await ref.transaction(state=>{try{const answer=A.arrive(state,{...ctx,student,fulfilled:todayPreorder?.status==='fulfilled',now:Date.now()});result=answer.result;error=null;return answer.state||undefined;}catch(e){error=e;return;}},undefined,false);
+   const transaction=await ref.transaction(state=>{try{const answer=A.arrive(state,{...ctx,student,fulfilled:todayPreorder?.status==='fulfilled',now:Date.now(),ignoreTime:skipTime});result=answer.result;error=null;return answer.state||undefined;}catch(e){error=e;return;}},undefined,false);
    if(current!==token||user?.uid!==student.uid)return;
    if(!transaction.committed&&result?.status!=='fulfilled')throw error||Error('좌석 확인 중 충돌이 발생했습니다. 다시 확인하세요.');
    if(result?.status==='fulfilled'){get('arrival-heading').textContent='이미 배식이 완료되었어요';get('arrival-seat').textContent='배식 완료';message(result.message);return;}
@@ -40,7 +42,7 @@
    if(todayPreorder?.status==='fulfilled'){message('이미 처리된 선주문입니다. 좌석만 안내하고 배식을 다시 등록하지 않습니다.');return;}
    get('arrival-continue').hidden=false;let remaining=2;message(`${remaining}초 후 ${todayPreorder?'선주문으로 바로 배식을 진행':'기존 배식 수량 선택 화면으로 이동'}합니다.`);
    timer=setInterval(()=>{if(current!==token||user?.uid!==student.uid||!systemOperating){stop();return;}remaining--;if(remaining<=0){stop();proceed();}else message(`${remaining}초 후 배식 절차로 이동합니다.`);},1000);
-  }catch(e){if(current===token){get('arrival-heading').textContent='좌석 안내를 확인해 주세요';get('arrival-seat').textContent='확인 필요';message(e.message,true);get('arrival-retry').hidden=false;}}
+  }catch(e){if(current===token){get('arrival-heading').textContent='좌석 안내를 확인해 주세요';get('arrival-seat').textContent='확인 필요';message(e.message,true);get('arrival-retry').hidden=false;timeSkipReady=e.code==='MEAL_TIME';}}
   finally{if(current===token)busy=false;}
  }
  async function proceed(){
@@ -70,8 +72,14 @@
  // 학생 확인 다음 동작만 확장합니다. 원래 대시보드/배식/카메라/제스처 함수는 유지합니다.
  showDashboard=entry;
  get('btn-start-serve').addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();if(visit?.status==='seated'&&user?.uid===uid)proceed();else entry();},true);
+ document.addEventListener('keydown',event=>{
+  if((event.code!=='KeyS'&&event.key.toLowerCase()!=='s')||event.repeat||event.ctrlKey||event.altKey||event.metaKey)return;
+  if(event.target?.closest?.('input,textarea,select,[contenteditable]:not([contenteditable="false"])'))return;
+  if(!timeSkipReady||busy||dispatching||!user?.uid||user.uid!==uid||!systemOperating||get('arrival-overlay').hidden)return;
+  event.preventDefault();timeSkipReady=false;entry(true);
+ });
  get('arrival-continue').onclick=proceed;get('arrival-retry').onclick=entry;
  get('arrival-dashboard').onclick=()=>{token++;busy=false;hide();originalDashboard();};
  // 자동 이동을 멈추고 대시보드로 돌아가도 배정 좌석은 유지합니다.
- setInterval(()=>{const next=user?.uid||null;if(observedUid!==next){observedUid=next;if(uid&&next!==uid){token++;stop();visit=null;uid=null;busy=false;hide();badge();}}if(!systemOperating)stop();},200);
+ setInterval(()=>{const next=user?.uid||null;if(observedUid!==next){observedUid=next;if(uid&&next!==uid){token++;stop();visit=null;uid=null;busy=false;hide();badge();}}if(!systemOperating){stop();timeSkipReady=false;}},200);
 })();

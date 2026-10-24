@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';import '../public/seat-core.js';import '../public/arrival-core.js';
+const C=globalThis.CafeteriaSeatCore,A=globalThis.CafeteriaArrivalCore;
+const student=n=>({uid:'u'+n,name:'학생'+n,grade:1,classNum:1,number:n});
+const ctx={date:'2026-10-24',now:Date.parse('2026-10-24T19:00:00+09:00'),layoutVersionId:'v1',layout:{schemaVersion:1,columns:18,rows:10,tables:{t_one:{id:'t_one',label:'T1',x:1,y:1,capacity:2,rotation:0,zone:'onsite'},t_two:{id:'t_two',label:'T2',x:9,y:1,capacity:2,rotation:0,zone:'reservation'}}},config:{enabled:true,maxFriends:7,slots:{a:{start:'12:00',end:'12:30'},b:{start:'12:30',end:'13:00'}}}};
+const arrive=(state,n,extra={})=>A.arrive(state,{...ctx,student:student(n),...extra});
+assert.throws(()=>arrive(null,1),e=>e.code==='MEAL_TIME');
+let r=arrive(null,1,{ignoreTime:true});assert.equal(r.result.status,'seated');assert.equal(Object.hasOwn(r.result,'timeCheckSkipped'),false);assert.equal(Object.hasOwn(r.state.arrivals.u1,'timeCheckSkipped'),false);assert.equal(r.result.label,'T1-1');
+assert.throws(()=>arrive(r.state,2),e=>e.code==='MEAL_TIME','override does not persist for next student');
+for(let n=2;n<=4;n++){const next=arrive(r.state,n,{ignoreTime:true});assert.notEqual(next.result.seatId,r.result.seatId);r=next;}
+assert.throws(()=>arrive(r.state,5,{ignoreTime:true}),/만석/);
+assert.throws(()=>arrive(null,1,{ignoreTime:true,date:'2026-10-23'}),/날짜/);
+assert.throws(()=>arrive(null,1,{ignoreTime:'true'}),e=>e.code==='MEAL_TIME');
+const early={...ctx,now:Date.parse('2026-10-24T11:00:00+09:00')};
+let booked=C.apply(null,{type:'create',actor:student(1),groupId:'g1',slotId:'a'},early);
+const seat=C.allSeats(booked.meta.layout).find(s=>s.zone==='reservation').id;
+booked=C.apply(booked,{type:'book',actor:student(1),groupId:'g1',seatIds:[seat]},early);
+assert.throws(()=>A.arrive(booked,{...early,student:student(1)}),e=>e.code==='MEAL_TIME');
+const mine=A.arrive(booked,{...early,student:student(1),ignoreTime:true});assert.equal(mine.result.seatId,seat);assert.equal(mine.result.source,'reservation');
+const late=arrive(booked,1,{ignoreTime:true});assert.equal(late.result.seatId,seat);
+const held=arrive(booked,2,{ignoreTime:true});assert.notEqual(held.result.seatId,seat);
+const held2=arrive(held.state,3,{ignoreTime:true}),held3=arrive(held2.state,4,{ignoreTime:true});assert.notEqual(held3.result.seatId,seat);assert.throws(()=>arrive(held3.state,5,{ignoreTime:true}),/만석/,'all reservation slots stay protected during a time override');
+const forming=structuredClone(booked);forming.groups.g1.status='forming';assert.throws(()=>arrive(forming,1,{ignoreTime:true}),/확정되지/);
+const served=arrive(null,1,{ignoreTime:true,fulfilled:true});assert.equal(served.result.status,'fulfilled');assert.equal(served.state,null);
+console.log('PASS explicit time-only override, early/expired reservation, own seat retained, sequential allocation, reserved/occupied seats protected, full/forming/date/fulfilled guards, no persistence between students.');
